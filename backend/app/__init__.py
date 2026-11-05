@@ -1,0 +1,1 @@
+"""CivicAI backend application package."""

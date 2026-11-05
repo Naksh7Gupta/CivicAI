@@ -1,0 +1,6 @@
+# Add backend dependencies here.
+ultralytics
+opencv-python
+numpy
+python-dotenv
+torch
