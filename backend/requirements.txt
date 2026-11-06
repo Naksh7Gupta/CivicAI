@@ -1,11 +1,13 @@
-# Add backend dependencies here.
-ultralytics
-opencv-python
+fastapi
+ftfy
+ipykernel
+matplotlib
+mmcv-lite
+mmengine
+mmsegmentation
 numpy
+opencv-python
 python-dotenv
 torch
-mmsegmentation
-mmcv-lite
-ftfy
-fastapi
+ultralytics
 uvicorn

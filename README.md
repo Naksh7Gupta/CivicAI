@@ -105,6 +105,8 @@ unusable crop falls back to full-frame pothole detection.
 The mask is converted to a padded crop (`ROI_PADDING_RATIO`, default `0.15`).
 YOLO detections are translated back to the original video coordinates before
 they are persisted, while the output video shows the road mask and detections.
+The backend loads the `.pth` road checkpoint through MMSegmentation and uses
+the Ultralytics model only for pothole detection.
 
 ### Run the dashboard
 

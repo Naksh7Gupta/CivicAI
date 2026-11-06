@@ -5,7 +5,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
-from ultralytics import YOLO
+import torch
 
 from app.core.config import (
     ROI_MIN_AREA_RATIO,
@@ -35,13 +35,68 @@ class RoadROIProcessor:
         self.model = None
         model_path = Path(ROAD_SEGMENTATION_MODEL_PATH)
         if model_path.exists():
-            self.model = YOLO(str(model_path))
+            self.model = self._load_model(model_path)
         else:
             logger.warning(
                 "Road segmentation model is unavailable at %s; "
                 "full-frame detection will be used.",
                 model_path,
             )
+
+    @staticmethod
+    def _install_mmcv_cpu_compatibility() -> None:
+        """Provide optional MMCV operators unavailable in mmcv-lite."""
+        import sys
+        import types
+        from torch.nn import functional as torch_functional
+
+        if "mmcv.ops" in sys.modules:
+            return
+
+        ops = types.ModuleType("mmcv.ops")
+        ops.point_sample = (
+            lambda inputs, points, **kwargs: torch_functional.grid_sample(
+                inputs,
+                points * 2 - 1,
+                align_corners=False,
+            )
+        )
+        ops.sigmoid_focal_loss = (
+            lambda *args, **kwargs: torch.tensor(0.0)
+        )
+
+        class UnusedOperator(torch.nn.Module):
+            pass
+
+        for name in (
+            "CrissCrossAttention",
+            "PSAMask",
+            "DeformConv2d",
+            "ModulatedDeformConv2d",
+        ):
+            setattr(ops, name, UnusedOperator)
+        sys.modules["mmcv.ops"] = ops
+
+    def _load_model(self, model_path: Path):
+        self._install_mmcv_cpu_compatibility()
+        from mmengine.config import Config
+        from mmseg.apis import init_model
+
+        checkpoint = torch.load(
+            model_path,
+            map_location="cpu",
+            weights_only=False,
+        )
+        config = Config.fromstring(
+            checkpoint["meta"]["config"],
+            ".py",
+        )
+        config.model.test_cfg.mode = "whole"
+        return init_model(
+            config,
+            str(model_path),
+            device=str(self.device),
+        )
 
     def process(self, frame: np.ndarray) -> RoadROI:
         height, width = frame.shape[:2]
@@ -51,19 +106,32 @@ class RoadROIProcessor:
         if self.model is None:
             return RoadROI(frame, full_bounds, full_mask, True)
 
-        results = self.model.predict(
-            frame,
-            device=self.device,
-            classes=[ROAD_SEGMENTATION_CLASS_ID],
-            verbose=False,
+        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        resized = cv2.resize(rgb_frame, (1024, 512))
+        tensor = torch.from_numpy(resized).permute(2, 0, 1).float()
+        mean = tensor.new_tensor(
+            [123.675, 116.28, 103.53]
+        )[:, None, None]
+        std = tensor.new_tensor(
+            [58.395, 57.12, 57.375]
+        )[:, None, None]
+        tensor = ((tensor - mean) / std).unsqueeze(0)
+        metadata = [
+            {
+                "img_shape": resized.shape,
+                "ori_shape": resized.shape,
+                "pad_shape": resized.shape,
+                "scale_factor": (1.0, 1.0, 1.0, 1.0),
+            }
+        ]
+        with torch.no_grad():
+            logits = self.model.inference(tensor, metadata)
+        labels = logits.argmax(1)[0].cpu().numpy()
+        binary_mask = cv2.resize(
+            (labels == ROAD_SEGMENTATION_CLASS_ID).astype(np.uint8),
+            (width, height),
+            interpolation=cv2.INTER_NEAREST,
         )
-        masks = results[0].masks
-        if masks is None or masks.data is None:
-            return RoadROI(frame, full_bounds, full_mask, True)
-
-        mask = masks.data.max(dim=0).values.cpu().numpy()
-        mask = cv2.resize(mask, (width, height), interpolation=cv2.INTER_NEAREST)
-        binary_mask = (mask > 0.5).astype(np.uint8)
         area_ratio = float(binary_mask.mean())
         ys, xs = np.where(binary_mask > 0)
 
