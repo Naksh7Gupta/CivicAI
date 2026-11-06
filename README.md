@@ -141,6 +141,9 @@ within 1.5 seconds. If no valid sample is close enough, the observation remains
 without coordinates. Incident merging only uses coordinates with known
 accuracy of 20 metres or better and keeps simulated and real locations separate.
 
+**Current scope:** this branch consumes a timestamped GPS sidecar CSV; live
+phone GPS capture and upload are not implemented yet.
+
 **Location limitation:** the recorded coordinate represents the vehicle's
 estimated position at the frame timestamp. It is not a surveyed coordinate of
 the pothole itself; camera direction and distance still need calibration.
