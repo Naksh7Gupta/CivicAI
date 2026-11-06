@@ -90,7 +90,7 @@ def associate_observation(observation_id: int, session_id: str, video_time_ms: f
         conn.close()
 
 
-def associate_session_observations(session_id: str) -> int:
+def associate_session_observations(session_id: str) -> dict:
     """Re-associate timestamped observations after a GPS sidecar upload."""
     conn = get_connection()
     try:
