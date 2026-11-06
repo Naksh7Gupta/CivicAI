@@ -88,11 +88,13 @@ class ReportingService:
                 """
                 SELECT o.id, o.pothole_id, o.timestamp, o.confidence,
                        o.x1, o.y1, o.x2, o.y2,
+                       t.image IS NOT NULL AS has_image,
                        ol.latitude, ol.longitude, ol.accuracy_m,
                        ol.location_source, ol.is_simulated, ol.method,
                        ol.location_semantics
                 FROM incident_tracks it
                 JOIN observations o ON o.pothole_id = it.pothole_track_id
+                JOIN pothole_tracks t ON t.id = o.pothole_id
                 LEFT JOIN observation_locations ol ON ol.observation_id = o.id
                 WHERE it.incident_id = ?
                 ORDER BY o.timestamp, o.id
@@ -125,7 +127,10 @@ class ReportingService:
                         item["x1"], item["y1"], item["x2"], item["y2"]
                     ],
                     "location": location,
-                    "image_url": f"/api/potholes/{item['pothole_id']}/image",
+                    "image_url": (
+                        f"/api/potholes/{item['pothole_id']}/image"
+                        if item["has_image"] else None
+                    ),
                 }
             )
 
@@ -141,6 +146,7 @@ class ReportingService:
             }
 
         limitations = [
+            "Observation timestamps currently record backend processing time, not the original camera capture time.",
             "No physical pothole dimensions or depth measurement are recorded.",
             "No human field-inspection result is recorded.",
             "No official repair, work-order, or completion status is recorded.",
