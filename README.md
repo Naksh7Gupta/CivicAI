@@ -118,23 +118,23 @@ geometry while YOLO still runs on each current frame.
 
 For recorded videos, provide a sidecar CSV whose timestamps are milliseconds
 from the beginning of the video. Copy
-\`backend/data/gps_trace.template.csv\`, populate it with the GPS samples
-belonging to that recording, and set \`GPS_TRACE_PATH\` in the local
-\`backend/.env\`.
+`backend/data/gps_trace.template.csv`, populate it with the GPS samples
+belonging to that recording, and set `GPS_TRACE_PATH` in the local
+`backend/.env`.
 
 Required columns:
 
-- \`elapsed_ms\`: timestamp on the video timeline
-- \`latitude\`, \`longitude\`: supplied GPS coordinates
+- `elapsed_ms`: timestamp on the video timeline
+- `latitude`, `longitude`: supplied GPS coordinates
 
 Optional columns:
 
-- \`accuracy_m\`: reported GPS accuracy in metres
-- \`source\`: for example \`phone_gps\` or \`synthetic\`
-- \`is_simulated\`: \`true\` for generated test coordinates, \`false\` for real GPS
+- `accuracy_m`: reported GPS accuracy in metres
+- `source`: for example `phone_gps` or `synthetic`
+- `is_simulated`: `true` for generated test coordinates, `false` for real GPS
 
-Synthetic samples must use \`source=synthetic\` and
-\`is_simulated=true\`. CivicAI interpolates between compatible nearby samples
+Synthetic samples must use `source=synthetic` and
+`is_simulated=true`. CivicAI interpolates between compatible nearby samples
 when the time gap is at most 3 seconds, otherwise it uses a nearest sample
 within 1.5 seconds. If no valid sample is close enough, the observation remains
 without coordinates. Incident merging only uses coordinates with known
@@ -148,22 +148,22 @@ the pothole itself; camera direction and distance still need calibration.
 
 The API exposes:
 
-- \`GET /api/incidents\` — aggregated incident records
-- \`GET /api/incidents/{id}\` — verified facts, limitations and evidence references
-- \`POST /api/incidents/{id}/report\` — generate and save an LLM-assisted report
-- \`GET /api/reports/{id}\` — retrieve a saved report
+- `GET /api/incidents` — aggregated incident records
+- `GET /api/incidents/{id}` — verified facts, limitations and evidence references
+- `POST /api/incidents/{id}/report` — generate and save an LLM-assisted report
+- `GET /api/reports/{id}` — retrieve a saved report
 
-Set \`GEMINI_API_KEY\` in the local \`backend/.env\` to enable report generation.
-Optionally set \`GEMINI_MODEL\`; the default is \`gemini-2.5-flash\`. The report
+Set `GEMINI_API_KEY` in the local `backend/.env` to enable report generation.
+Optionally set `GEMINI_MODEL`; the default is `gemini-2.5-flash`. The report
 keeps deterministic database facts separate from LLM narrative, validates
 evidence IDs, and explicitly lists missing inspection data. Model confidence
 is never converted into physical severity.
 
-Run the backend tests from the \`backend\` directory:
+Run the backend tests from the `backend` directory:
 
-\`\`\`bash
+```bash
 python -m unittest discover -s tests
-\`\`\`
+```
 
 ### Run the dashboard
 
