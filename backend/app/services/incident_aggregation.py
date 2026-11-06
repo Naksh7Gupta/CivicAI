@@ -157,7 +157,7 @@ class IncidentAggregator:
                         location["location_source"] if location else None,
                         int(location["is_simulated"]) if location else None,
                         location["location_semantics"] if location else "vehicle_position_estimate",
-                        "gps_radius" if location and location["accuracy_m"] is not None else "single_track",
+                        "located_track" if location else "single_track",
                         track["first_seen"],
                         track["last_seen"],
                     ),
@@ -169,6 +169,10 @@ class IncidentAggregator:
                     "SELECT * FROM incidents WHERE id = ?", (incident_id,)
                 ).fetchone()
                 self._update_incident(connection, incident, track, location)
+                connection.execute(
+                    "UPDATE incidents SET merge_method = 'gps_radius_merge' WHERE id = ?",
+                    (incident_id,),
+                )
 
             connection.execute(
                 """
