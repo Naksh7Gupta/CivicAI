@@ -19,7 +19,7 @@ class DetectionManager:
 
         self.crop_storage = CropStorage()
 
-    def process(self, frame, result, offset=(0, 0)):
+    def process(self, frame, result, offset=(0, 0), video_time_ms=None):
 
         boxes = result.boxes
 
@@ -111,9 +111,13 @@ class DetectionManager:
                     crop_path
                 )
 
-            add_observation(
+            observation_id = add_observation(
                 pothole_id,
                 timestamp,
                 confidence,
-                bbox
+                bbox,
+                video_time_ms=video_time_ms
             )
+            if video_time_ms is not None:
+                from app.services.gps_repository import associate_observation
+                associate_observation(observation_id, self.session_id, video_time_ms)
