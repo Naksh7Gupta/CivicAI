@@ -248,6 +248,3 @@ class DetectionManager:
                 bbox,
                 video_time_ms=video_time_ms
             )
-            if video_time_ms is not None:
-                from app.services.gps_repository import associate_observation
-                associate_observation(observation_id, self.session_id, video_time_ms)
