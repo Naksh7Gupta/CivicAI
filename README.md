@@ -10,10 +10,10 @@ categories over time.
 
 ## Project status
 
-The ROI branch now includes the YOLO pothole pipeline, timestamp-aligned GPS
+The feature/gps-incident-reporting branch adds timestamp-aligned GPS
 association, SQLite incident grouping, evidence retrieval, and an on-demand
-LLM incident-report endpoint. The T4/YOLO inference path remains separate from
-report generation.
+LLM incident-report endpoint on top of the ROI pipeline. The YOLO inference
+path remains separate from report generation.
 
 ## How it works
 
@@ -88,6 +88,7 @@ From the project root:
 cd backend
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
+Copy-Item .env.example .env
 pip install -r requirements.txt
 ```
 
@@ -183,11 +184,11 @@ npm install
 npm run dev
 ```
 
-The dashboard reads only from `GET /api/potholes`. Detection crops are stored
-as image BLOBs in SQLite and served by `GET /api/potholes/{id}/image`; no
-frontend seed or synthetic detection data is used. GPS values are shown when
-the backend begins persisting them; existing records correctly report GPS as
-unavailable.
+The dashboard reads from `GET /api/potholes`. Detection crops are stored as
+image BLOBs in SQLite and served by `GET /api/potholes/{id}/image`. Detection
+records come from the model; a synthetic GPS sidecar, when used for a demo,
+is explicitly labelled as simulated. Existing records without location data
+continue to report GPS as unavailable.
 
 ### Configuration
 
