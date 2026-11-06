@@ -88,13 +88,13 @@ def upload_gps_samples(session_id: str, payload: GPSSamplesPayload):
     ]
     try:
         saved = save_gps_samples(session_id, samples)
-        reprocessed = associate_session_observations(session_id)
+        association_counts = associate_session_observations(session_id)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return {
         "session_id": session_id,
         "gps_samples_saved": saved,
-        "timestamped_observations_reprocessed": reprocessed,
+        "gps_association_counts": association_counts,
         "location_kind": "vehicle_position_estimate",
         "note": (
             "GPS positions are associated by video-relative timestamps. They represent "
