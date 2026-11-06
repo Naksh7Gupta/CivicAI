@@ -16,7 +16,6 @@ def create_track(
     confidence,
     bbox,
     crop_path,
-    image
 ):
 
     conn = get_connection()
@@ -32,7 +31,8 @@ def create_track(
             last_seen,
             best_confidence,
             x1, y1, x2, y2,
-            crop_path
+            crop_path,
+            image
 
         )
 
@@ -139,7 +139,8 @@ def add_observation(
     pothole_id,
     timestamp,
     confidence,
-    bbox
+    bbox,
+    video_time_ms=None,
 ):
 
     conn = get_connection()
@@ -152,11 +153,12 @@ def add_observation(
             pothole_id,
             timestamp,
             confidence,
-            x1, y1, x2, y2
+            x1, y1, x2, y2,
+            video_time_ms
 
         )
 
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 
     """, (
         pothole_id,
