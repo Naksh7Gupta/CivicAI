@@ -57,3 +57,5 @@ GPS_TRACE_PATH = (
     if GPS_TRACE_PATH_RAW
     else None
 )
+if GPS_TRACE_PATH is not None and not GPS_TRACE_PATH.is_absolute():
+    GPS_TRACE_PATH = BASE_DIR / GPS_TRACE_PATH
