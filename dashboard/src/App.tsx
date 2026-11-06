@@ -2,14 +2,28 @@ import { useEffect, useMemo, useState } from 'react'
 
 type Pothole = {
   id: string
+  track_record_id: number
   image_url: string
   timestamp: string
   latitude: number | null
   longitude: number | null
+  gps_accuracy_m: number | null
+  is_simulated: boolean
   confidence: number
-  severity: 'High' | 'Medium' | 'Low'
+  severity: 'Unassessed' | 'High' | 'Medium' | 'Low'
+  observation_count: number
   address: string
   status: 'Needs review' | 'Reported' | 'Monitoring'
+}
+
+type IncidentReport = {
+  narrative: {
+    status: string
+    summary: string | null
+    field_checks: string[]
+    message?: string | null
+  }
+  notices: string[]
 }
 
 const icon = (name: string) => {
@@ -33,10 +47,20 @@ function formatTime(value: string) {
   return new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' }).format(new Date(value))
 }
 
-function mapPosition(latitude: number | null, longitude: number | null) {
+function mapPosition(latitude: number | null, longitude: number | null, points: Pothole[]) {
   if (latitude === null || longitude === null) return { left: '50%', top: '50%' }
-  const left = Math.min(88, Math.max(12, ((longitude + 74.01) / 0.045) * 100))
-  const top = Math.min(86, Math.max(14, (1 - (latitude - 40.72) / 0.04) * 100))
+  const located = points.filter((item) => item.latitude !== null && item.longitude !== null)
+  if (!located.length) return { left: '50%', top: '50%' }
+  const latitudes = located.map((item) => item.latitude as number)
+  const longitudes = located.map((item) => item.longitude as number)
+  const minLat = Math.min(...latitudes)
+  const maxLat = Math.max(...latitudes)
+  const minLon = Math.min(...longitudes)
+  const maxLon = Math.max(...longitudes)
+  const latSpan = Math.max(maxLat - minLat, 0.0001)
+  const lonSpan = Math.max(maxLon - minLon, 0.0001)
+  const left = 12 + ((longitude - minLon) / lonSpan) * 76
+  const top = 14 + ((maxLat - latitude) / latSpan) * 72
   return { left: `${left}%`, top: `${top}%` }
 }
 
@@ -47,9 +71,11 @@ function App() {
   const [activeNav, setActiveNav] = useState('Overview')
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
+  const [reportData, setReportData] = useState<IncidentReport | null>(null)
+  const [reportLoading, setReportLoading] = useState(false)
   const selected = potholes.find((item) => item.id === selectedId) ?? potholes[0]
   const filtered = potholes.filter((item) => `${item.id} ${item.address}`.toLowerCase().includes(query.toLowerCase()))
-  const highPriority = potholes.filter((item) => item.severity === 'High').length
+  const needsAssessment = potholes.filter((item) => item.severity === 'Unassessed').length
   const averageConfidence = potholes.length ? Math.round((potholes.reduce((sum, item) => sum + item.confidence, 0) / potholes.length) * 100) : 0
   const detectionsLast24Hours = potholes.filter((item) => Date.now() - new Date(item.timestamp).getTime() <= 24 * 60 * 60 * 1000).length
   const locationsCovered = new Set(potholes.filter((item) => item.latitude !== null && item.longitude !== null).map((item) => `${item.latitude},${item.longitude}`)).size
@@ -77,7 +103,31 @@ function App() {
     return () => { active = false }
   }, [])
 
-  const report = useMemo(() => selected ? `Detected ${selected.severity.toLowerCase()}-priority road surface damage at ${selected.address}. Computer vision confidence is ${Math.round(selected.confidence * 100)}%, captured ${formatTime(selected.timestamp)}. Recommend field verification and repair triage.` : '', [selected])
+  useEffect(() => {
+    if (!selected) {
+      setReportData(null)
+      return
+    }
+    let active = true
+    setReportLoading(true)
+    fetch(`/api/reports/incidents/${selected.track_record_id}`)
+      .then((response) => {
+        if (!response.ok) throw new Error(`Report endpoint returned ${response.status}.`)
+        return response.json() as Promise<IncidentReport>
+      })
+      .then((data) => {
+        if (active) setReportData(data)
+      })
+      .catch(() => {
+        if (active) setReportData(null)
+      })
+      .finally(() => {
+        if (active) setReportLoading(false)
+      })
+    return () => { active = false }
+  }, [selected?.track_record_id])
+
+  const report = useMemo(() => reportData?.narrative.summary ?? (selected ? `A pothole candidate was recorded at ${selected.address}. Model confidence is ${Math.round(selected.confidence * 100)}%. Physical severity has not been assessed; field verification is required.` : ''), [reportData, selected])
 
   return (
     <div className="app-shell">
@@ -97,14 +147,14 @@ function App() {
           {!loading && loadError && <div className="data-state error">Unable to load real detections: {loadError}</div>}
           {!loading && !loadError && potholes.length === 0 && <div className="data-state">No pothole detections have been persisted yet.</div>}
           <div className="intro-row"><div><p className="eyebrow">CIVICAI OPERATIONS <span className="dot" /> LIVE DATABASE</p><h1>Infrastructure intelligence <span>✦</span></h1><p className="subheading">A live view of persisted pothole detections from the CivicAI backend.</p></div><div className="intro-actions"><button className="button primary" onClick={() => window.print()}>{icon('download')} Export report</button></div></div>
-          <div className="stat-grid"><StatCard label="Total detections" value={potholes.length.toString()} delta="Persisted" note="in CivicAI database" iconName="pin" accent="mint" /><StatCard label="High priority" value={highPriority.toString().padStart(2, '0')} delta="Current records" note="confidence ≥ 90%" iconName="chart" accent="orange" /><StatCard label="Avg. confidence" value={`${averageConfidence}%`} delta="Database average" note="across detections" iconName="chart" accent="blue" /><StatCard label="GPS locations" value={locationsCovered.toString()} delta="Available coordinates" note="from persisted records" iconName="map" accent="purple" /></div>
+          <div className="stat-grid"><StatCard label="Total detections" value={potholes.length.toString()} delta="Persisted" note="in CivicAI database" iconName="pin" accent="mint" /><StatCard label="Needs assessment" value={needsAssessment.toString().padStart(2, '0')} delta="Not field assessed" note="confidence is not severity" iconName="chart" accent="orange" /><StatCard label="Avg. confidence" value={`${averageConfidence}%`} delta="Database average" note="across detections" iconName="chart" accent="blue" /><StatCard label="GPS locations" value={locationsCovered.toString()} delta="Available coordinates" note="from persisted records" iconName="map" accent="purple" /></div>
           <div className="dashboard-grid">
-            <section className="panel map-panel"><div className="panel-heading"><div><p className="eyebrow">GEO-SPATIAL OVERVIEW</p><h2>Detection activity</h2></div><button className="text-button" onClick={() => setActiveNav('Live map')}>View full map {icon('arrow')}</button></div><div className="map-wrap"><div className="map-grid" /><div className="road road-a" /><div className="road road-b" /><div className="road road-c" /><div className="road road-d" />{potholes.filter((item) => item.latitude !== null && item.longitude !== null).map((item) => <button key={item.id} className={`map-pin ${item.id === selectedId ? 'selected' : ''}`} style={mapPosition(item.latitude, item.longitude)} onClick={() => setSelectedId(item.id)} aria-label={`Select ${item.id}`}><span>{icon('pin')}</span></button>)}{locationsCovered === 0 && <div className="map-empty">No GPS coordinates in persisted detections.</div>}<div className="map-legend"><span><i className="legend-dot high" /> High priority</span><span><i className="legend-dot medium" /> Monitoring</span></div><div className="map-controls"><button>+</button><button>−</button><button>{icon('pin')}</button></div></div></section>
+            <section className="panel map-panel"><div className="panel-heading"><div><p className="eyebrow">GEO-SPATIAL OVERVIEW</p><h2>Detection activity</h2></div><button className="text-button" onClick={() => setActiveNav('Live map')}>View full map {icon('arrow')}</button></div><div className="map-wrap"><div className="map-grid" /><div className="road road-a" /><div className="road road-b" /><div className="road road-c" /><div className="road road-d" />{potholes.filter((item) => item.latitude !== null && item.longitude !== null).map((item) => <button key={item.id} className={`map-pin ${item.id === selectedId ? 'selected' : ''}`} style={mapPosition(item.latitude, item.longitude, potholes)} onClick={() => setSelectedId(item.id)} aria-label={`Select ${item.id}`}><span>{icon('pin')}</span></button>)}{locationsCovered === 0 && <div className="map-empty">No GPS coordinates in persisted detections.</div>}<div className="map-legend"><span><i className="legend-dot high" /> High priority</span><span><i className="legend-dot medium" /> Monitoring</span></div><div className="map-controls"><button>+</button><button>−</button><button>{icon('pin')}</button></div></div></section>
             <section className="panel activity-panel"><div className="panel-heading"><div><p className="eyebrow">LAST 24 HOURS</p><h2>Detection volume</h2></div><span className="data-source">Live database</span></div><div className="chart-summary"><strong>{detectionsLast24Hours}</strong><span>detections <b>persisted</b></span></div><div className="empty-chart">{detectionsLast24Hours === 0 ? 'No detections recorded in the last 24 hours.' : `${detectionsLast24Hours} detection${detectionsLast24Hours === 1 ? '' : 's'} recorded in the last 24 hours.`}</div></section>
           </div>
           <div className="lower-grid">
             <section className="panel gallery-panel"><div className="panel-heading"><div><p className="eyebrow">RECENT EVIDENCE</p><h2>Captured potholes <span className="count-badge">{filtered.length}</span></h2></div><button className="text-button" onClick={() => setActiveNav('Evidence gallery')}>View gallery {icon('arrow')}</button></div><div className="gallery-grid">{filtered.slice(0, 4).map((item) => <button className={`evidence-card ${item.id === selectedId ? 'selected' : ''}`} key={item.id} onClick={() => setSelectedId(item.id)}><div className="evidence-image"><img src={item.image_url} alt={`Evidence for ${item.id}`} /><span className={`confidence ${item.severity.toLowerCase()}`}>{Math.round(item.confidence * 100)}%</span><span className="image-expand">↗</span></div><div className="evidence-meta"><div><b>{item.id}</b><small>{formatTime(item.timestamp)} <span>•</span> {item.address}</small></div><span className={`severity ${item.severity.toLowerCase()}`}>{item.severity}</span></div></button>)}</div></section>
-            <section className="panel detail-panel"><div className="panel-heading"><div><p className="eyebrow">SELECTED INCIDENT</p><h2>{selected?.id ?? 'No selection'}</h2></div><button className="more-button">•••</button></div>{selected && <><div className="detail-image"><img src={selected.image_url} alt="" /><span className="verified-tag">✓ AI verified</span></div><div className="detail-fields"><div><small>LOCATION</small><b>{selected.address}</b><span>{selected.latitude !== null && selected.longitude !== null ? `${selected.latitude.toFixed(4)}° N, ${Math.abs(selected.longitude).toFixed(4)}° W` : 'GPS coordinates unavailable'}</span></div><div><small>CAPTURED</small><b>{formatTime(selected.timestamp)}</b><span>Persisted detection record</span></div><div><small>MODEL CONFIDENCE</small><b>{Math.round(selected.confidence * 100)}% <span className={`severity ${selected.severity.toLowerCase()}`}>{selected.severity}</span></b><span>Above review threshold</span></div></div><div className="report-box"><small>AUTO-GENERATED INCIDENT REPORT</small><p>{report}</p></div><button className="button primary full" onClick={() => setActiveNav('Reports')}>Open full incident report {icon('arrow')}</button></>}</section>
+            <section className="panel detail-panel"><div className="panel-heading"><div><p className="eyebrow">SELECTED INCIDENT</p><h2>{selected?.id ?? 'No selection'}</h2></div><button className="more-button">•••</button></div>{selected && <><div className="detail-image"><img src={selected.image_url} alt="" /><span className="verified-tag">AI detection</span></div><div className="detail-fields"><div><small>LOCATION</small><b>{selected.address}</b><span>{selected.latitude !== null && selected.longitude !== null ? `${Math.abs(selected.latitude).toFixed(4)}° ${selected.latitude >= 0 ? 'N' : 'S'}, ${Math.abs(selected.longitude).toFixed(4)}° ${selected.longitude >= 0 ? 'E' : 'W'}` : 'GPS coordinates unavailable'}</span></div><div><small>CAPTURED</small><b>{formatTime(selected.timestamp)}</b><span>Persisted detection record</span></div><div><small>MODEL CONFIDENCE</small><b>{Math.round(selected.confidence * 100)}%</b><span>Detection score; not physical severity</span></div></div><div className="report-box"><small>INCIDENT REPORT {reportLoading ? '· GENERATING' : reportData?.narrative.status === 'generated' ? '· LLM' : '· EVIDENCE SUMMARY'}</small><p>{report}</p>{reportData?.notices.map((notice) => <small key={notice}>{notice}</small>)}{reportData?.narrative.field_checks.map((check) => <small key={check}>Suggested field check: {check}</small>)}</div><button className="button primary full" onClick={() => setActiveNav('Reports')}>Open full incident report {icon('arrow')}</button></>}</section>
           </div>
         </section>
       </main>
