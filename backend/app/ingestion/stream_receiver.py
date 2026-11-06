@@ -40,7 +40,8 @@ class StreamReceiver:
             timestamp_ms = (
                 self.frame_index * 1000.0 / self.fps if self.fps is not None else None
             )
-        self.last_timestamp_ms = timestamp_ms
+        if timestamp_ms is not None:
+            self.last_timestamp_ms = timestamp_ms
         return frame
 
     def release(self):
