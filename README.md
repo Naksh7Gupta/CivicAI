@@ -4,7 +4,7 @@ AI-powered civic infrastructure monitoring for safer, more accountable
 communities.
 
 CivicAI uses computer vision to identify and document infrastructure issues
-from vehicle or mobile-camera footage. The initial focus is pothole detection,
+from recorded vehicle video files. The initial focus is pothole detection,
 with the architecture designed to support additional civic infrastructure
 categories over time.
 
@@ -17,7 +17,7 @@ modules are scaffolded and ready for implementation.
 ## How it works
 
 ```text
-Camera or video stream
+Video file
           |
           v
 Frame acquisition and preprocessing
@@ -93,6 +93,19 @@ The dependency file is currently a placeholder while the backend modules are
 being implemented. Add runtime dependencies there before running the
 application.
 
+### Road ROI configuration
+
+The video pipeline optionally loads a road-specific segmentation model from
+`backend/models/segmentation_model.pt`. Set
+`ROAD_SEGMENTATION_MODEL_PATH` in `backend/.env` to use another local weights
+file. The model's road class defaults to class `0`; override it with
+`ROAD_SEGMENTATION_CLASS_ID` when needed. A missing model, empty mask, or
+unusable crop falls back to full-frame pothole detection.
+
+The mask is converted to a padded crop (`ROI_PADDING_RATIO`, default `0.15`).
+YOLO detections are translated back to the original video coordinates before
+they are persisted, while the output video shows the road mask and detections.
+
 ### Run the dashboard
 
 Install the backend dependencies, start the API, and start the dashboard in
@@ -134,7 +147,8 @@ evidence crops are stored under `backend/storage/potholes/`.
 
 ## Planned capabilities
 
-- Video and live camera stream ingestion
+- Video-file ingestion
+- Road-segmentation ROI preprocessing before pothole detection
 - Pothole detection and multi-frame tracking
 - GPS-aware infrastructure observations
 - Evidence image management

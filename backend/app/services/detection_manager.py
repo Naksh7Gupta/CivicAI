@@ -19,7 +19,7 @@ class DetectionManager:
 
         self.crop_storage = CropStorage()
 
-    def process(self, frame, result):
+    def process(self, frame, result, offset=(0, 0)):
 
         boxes = result.boxes
 
@@ -45,6 +45,10 @@ class DetectionManager:
                 int,
                 bbox
             )
+            x1 += offset[0]
+            x2 += offset[0]
+            y1 += offset[1]
+            y2 += offset[1]
 
             bbox = (x1, y1, x2, y2)
 

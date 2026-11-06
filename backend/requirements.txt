@@ -4,5 +4,8 @@ opencv-python
 numpy
 python-dotenv
 torch
+mmsegmentation
+mmcv-lite
+ftfy
 fastapi
 uvicorn

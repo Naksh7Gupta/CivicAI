@@ -1,2 +1,14 @@
 /references
 /backend/venv
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+
+# Other
+.pytest_cache/
+.mypy_cache/

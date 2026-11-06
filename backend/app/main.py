@@ -8,6 +8,7 @@ from app.core.config import BASE_DIR
 from app.database.database import initialize_database
 
 from app.ingestion.stream_receiver import StreamReceiver
+from app.ingestion.road_roi import RoadROIProcessor
 
 from app.detection.detector import PotholeDetector
 
@@ -31,10 +32,6 @@ def main():
 
     video_path = BASE_DIR.parent / "references" / "20250118_171213_clip01of01.mp4"
     output_path = BASE_DIR.parent / "references" / "pothole_detection_output.mp4"
-    image_path = BASE_DIR.parent / "references" / "image.png"
-    image_output_path = (
-        BASE_DIR.parent / "references" / "pothole_detection_image2.png"
-    )
     receiver = StreamReceiver(str(video_path))
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -43,6 +40,7 @@ def main():
         print("GPU:", torch.cuda.get_device_name(0))
 
     detector = PotholeDetector(device=device)
+    roi_processor = RoadROIProcessor(device=device)
 
     manager = DetectionManager(session_id)
 
@@ -61,20 +59,21 @@ def main():
             if frame is None:
                 break
 
-            # Run detection and tracking
-
-            result = detector.detect(frame)
+            # Segment the road, then detect only inside the resulting crop.
+            roi = roi_processor.process(frame)
+            result = detector.detect(roi.image)
 
             # Save detections and crops
 
             manager.process(
                 frame,
-                result
+                result,
+                offset=roi.bounds[:2]
             )
 
             # Display detections
 
-            annotated_frame = result.plot()
+            annotated_frame = roi_processor.annotate(frame, roi, result)
 
             if writer is None:
                 height, width = annotated_frame.shape[:2]
@@ -99,22 +98,6 @@ def main():
         if writer is not None:
             writer.release()
 
-        image = cv2.imread(str(image_path))
-        if image is None:
-            raise RuntimeError(f"Unable to open image: {image_path}")
-
-        image_result = detector.detect_image(image)
-        manager.process(image, image_result)
-
-        if not cv2.imwrite(
-            str(image_output_path),
-            image_result.plot()
-        ):
-            raise RuntimeError(
-                f"Unable to save annotated image: {image_output_path}"
-            )
-
-        print("Saving annotated image to:", image_output_path)
         print("CivicAI stopped.")
 
 

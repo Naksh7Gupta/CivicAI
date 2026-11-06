@@ -4,13 +4,16 @@ import cv2
 
 class StreamReceiver:
 
-    def __init__(self, source=0):
+    def __init__(self, source):
 
         self.source = source
 
         self.capture = None
 
     def start(self):
+
+        if not isinstance(self.source, (str, bytes)):
+            raise TypeError("Video source must be a filesystem path.")
 
         self.capture = cv2.VideoCapture(
             self.source
