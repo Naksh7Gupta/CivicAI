@@ -10,9 +10,10 @@ categories over time.
 
 ## Project status
 
-The repository currently contains the initial backend structure and a
-YOLO-based pothole model. Detection, tracking, persistence, and reporting
-modules are scaffolded and ready for implementation.
+The ROI branch now includes the YOLO pothole pipeline, timestamp-aligned GPS
+association, SQLite incident grouping, evidence retrieval, and an on-demand
+LLM incident-report endpoint. The T4/YOLO inference path remains separate from
+report generation.
 
 ## How it works
 
@@ -64,7 +65,8 @@ CivicAI/
 │   │   └── pothole.pt         # Pothole detection model
 │   ├── storage/
 │   │   └── potholes/          # Stored detection crops
-│   ├── .env                   # Local environment configuration
+│   ├── .env.example           # Safe configuration template
+│   ├── .env                   # Local-only configuration (ignored)
 │   └── requirements.txt       # Python dependencies
 ├── dashboard/                 # React/Vite operations dashboard
 └── references/                # Reference images, notebook, and source model
@@ -89,9 +91,9 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-The dependency file is currently a placeholder while the backend modules are
-being implemented. Add runtime dependencies there before running the
-application.
+The backend requirements file contains the current runtime dependencies. The
+reporting client uses Python's standard-library HTTP client, so no additional
+LLM SDK is required.
 
 ### Road ROI configuration
 
@@ -110,6 +112,58 @@ the Ultralytics model only for pothole detection.
 Segmentation runs on frame 1 and every 20th frame by default
 (`ROI_SEGMENTATION_INTERVAL`); intervening frames reuse the latest mask
 geometry while YOLO still runs on each current frame.
+
+
+### GPS trace association
+
+For recorded videos, provide a sidecar CSV whose timestamps are milliseconds
+from the beginning of the video. Copy
+\`backend/data/gps_trace.template.csv\`, populate it with the GPS samples
+belonging to that recording, and set \`GPS_TRACE_PATH\` in the local
+\`backend/.env\`.
+
+Required columns:
+
+- \`elapsed_ms\`: timestamp on the video timeline
+- \`latitude\`, \`longitude\`: supplied GPS coordinates
+
+Optional columns:
+
+- \`accuracy_m\`: reported GPS accuracy in metres
+- \`source\`: for example \`phone_gps\` or \`synthetic\`
+- \`is_simulated\`: \`true\` for generated test coordinates, \`false\` for real GPS
+
+Synthetic samples must use \`source=synthetic\` and
+\`is_simulated=true\`. CivicAI interpolates between compatible nearby samples
+when the time gap is at most 3 seconds, otherwise it uses a nearest sample
+within 1.5 seconds. If no valid sample is close enough, the observation remains
+without coordinates. Incident merging only uses coordinates with known
+accuracy of 20 metres or better and keeps simulated and real locations separate.
+
+**Location limitation:** the recorded coordinate represents the vehicle's
+estimated position at the frame timestamp. It is not a surveyed coordinate of
+the pothole itself; camera direction and distance still need calibration.
+
+### Incident reports
+
+The API exposes:
+
+- \`GET /api/incidents\` — aggregated incident records
+- \`GET /api/incidents/{id}\` — verified facts, limitations and evidence references
+- \`POST /api/incidents/{id}/report\` — generate and save an LLM-assisted report
+- \`GET /api/reports/{id}\` — retrieve a saved report
+
+Set \`GEMINI_API_KEY\` in the local \`backend/.env\` to enable report generation.
+Optionally set \`GEMINI_MODEL\`; the default is \`gemini-2.5-flash\`. The report
+keeps deterministic database facts separate from LLM narrative, validates
+evidence IDs, and explicitly lists missing inspection data. Model confidence
+is never converted into physical severity.
+
+Run the backend tests from the \`backend\` directory:
+
+\`\`\`bash
+python -m unittest discover -s tests
+\`\`\`
 
 ### Run the dashboard
 
