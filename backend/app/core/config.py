@@ -51,3 +51,9 @@ ROI_MIN_HEIGHT = int(os.getenv("ROI_MIN_HEIGHT", "64"))
 ROI_SEGMENTATION_INTERVAL = int(
     os.getenv("ROI_SEGMENTATION_INTERVAL", "20")
 )
+GPS_TRACE_PATH_RAW = os.getenv("GPS_TRACE_PATH")
+GPS_TRACE_PATH = (
+    Path(GPS_TRACE_PATH_RAW).expanduser()
+    if GPS_TRACE_PATH_RAW
+    else None
+)
