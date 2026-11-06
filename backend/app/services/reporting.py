@@ -20,7 +20,7 @@ class ReportGenerationError(RuntimeError):
     pass
 
 
-class ReportValidationError(RuntimeError):
+class ReportValidationError(ReportGenerationError):
     pass
 
 
@@ -151,6 +151,7 @@ class ReportingService:
             "No human field-inspection result is recorded.",
             "No official repair, work-order, or completion status is recorded.",
             "Model confidence is not a measurement of physical severity.",
+            "GPS-radius grouping is a provisional heuristic; nearby separate potholes may be merged or repeated passes may remain split.",
         ]
         if location is None:
             limitations.append("No GPS coordinates were associated with this incident.")
@@ -172,6 +173,7 @@ class ReportingService:
             "observation_count": len(evidence),
             "best_model_confidence": incident["best_confidence"],
             "workflow_status": incident["status"],
+            "grouping_method": incident["merge_method"],
             "location": location,
         }
         return {
