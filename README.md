@@ -1,173 +1,69 @@
 # CivicAI
 
-AI-powered civic infrastructure monitoring for safer, more accountable
-communities.
+AI-powered civic infrastructure monitoring for safer, more accountable communities.
 
-CivicAI uses computer vision to identify and document infrastructure issues
-from recorded vehicle video files. The initial focus is pothole detection,
-with the architecture designed to support additional civic infrastructure
-categories over time.
+CivicAI uses computer vision to identify and document infrastructure issues from recorded vehicle or mobile-camera footage. The initial focus is pothole detection. The existing YOLO + road-ROI inference path is kept separate from GPS association and reporting so those services do not change model inference.
 
-## Project status
+## Current pipeline
 
-The repository currently contains the initial backend structure and a
-YOLO-based pothole model. Detection, tracking, persistence, and reporting
-modules are scaffolded and ready for implementation.
+~~~text
+Video frame -> road ROI -> YOLO tracking -> evidence crop
+                                      |
+GPS CSV + frame media timestamp -----+
+                                      v
+                            SQLite observations
+                                      v
+                           incident aggregation
+                                      v
+                      database facts -> report engine
+                                      v
+                            dashboard/API reports
+~~~
 
-## How it works
+## GPS association
 
-```text
-Video file
-          |
-          v
-Frame acquisition and preprocessing
-          |
-          v
-Pothole detection
-          |
-          v
-Object tracking and validation
-          |
-          v
-Evidence crop storage
-          |
-          v
-SQLite database
-          |
-          v
-Reports and dashboard
-```
+GPS is optional. If no track CSV is configured, detections are saved with coordinates unavailable; CivicAI does not generate placeholder coordinates.
 
-Each validated observation is intended to include:
+Set **GPS_TRACK_CSV** in backend/.env. The CSV must include these columns:
 
-- Issue category and detection confidence
-- Timestamp and tracking information
-- GPS coordinates when available
-- A reference to the captured visual evidence
+~~~csv
+video_timestamp_seconds,latitude,longitude,accuracy_m,location_source,is_simulated
+~~~
 
-## Repository structure
+Use either **video_timestamp_seconds** (seconds from the start of the video) or **timestamp_utc**. If using **timestamp_utc**, also set **VIDEO_START_TIME_UTC** to the UTC start time of the video, including Z or an explicit timezone offset. **location_source** must describe the source (for example phone_gps or synthetic), and **is_simulated** must be explicitly true or false.
 
-```text
-CivicAI/
-├── backend/
-│   ├── app/
-│   │   ├── core/              # Configuration and logging
-│   │   ├── database/          # Database connection, models, repositories
-│   │   ├── detection/         # Detection and tracking
-│   │   ├── ingestion/         # Stream and frame processing
-│   │   ├── services/          # Application workflows and storage
-│   │   ├── utils/             # Shared image utilities
-│   │   └── main.py            # Backend entry point
-│   ├── data/
-│   │   └── civicai.db         # Local SQLite database
-│   ├── models/
-│   │   └── pothole.pt         # Pothole detection model
-│   ├── storage/
-│   │   └── potholes/          # Stored detection crops
-│   ├── .env                   # Local environment configuration
-│   └── requirements.txt       # Python dependencies
-├── dashboard/                 # React/Vite operations dashboard
-└── references/                # Reference images, notebook, and source model
-```
+CivicAI associates a frame only with the nearest sample inside **GPS_MAX_DELTA_SECONDS** (default 2 seconds). The match stores the time difference, reported accuracy, source, and simulation flag. Low-accuracy and unknown-accuracy fixes remain visibly flagged. A GPS fix describes the camera/vehicle position associated with the frame; it is **not** a surveyed pothole coordinate because camera direction and road offset are not calibrated yet.
 
-## Getting started
+## Incident aggregation
 
-### Prerequisites
+A tracker ID within one video session becomes one incident record. Repeated frame detections update that incident's observation count, first/last-seen times, best model confidence, and evidence reference. When the tracker supplies no ID, CivicAI deliberately creates separate candidate records rather than guessing that detections belong to the same physical pothole.
 
-- Python 3.10 or newer
-- Git
-- A virtual environment
+Cross-session spatial deduplication is not enabled yet. It needs a validated camera-to-road location offset and GPS accuracy policy; merging on raw vehicle GPS could incorrectly combine nearby potholes.
 
-### Setup
+## Reports
 
-From the project root:
+The API exposes:
 
-```powershell
-cd backend
+- GET /api/incidents
+- GET /api/incidents/{id}/report
+- GET /api/reports/area?session_id=...
+- GET /api/reports/executive-summary?session_id=...
+
+Reports are built from SQLite records. The immutable facts object is separate from the narrative. If an OpenAI-compatible chat-completions endpoint is configured using **LLM_API_BASE_URL**, **LLM_MODEL**, and optionally **LLM_API_KEY**, the report service asks that model for a cautious narrative. Otherwise it returns a deterministic fallback and labels it as such. No LLM credential is required to test the data/report pipeline.
+
+Model confidence is not physical damage severity. The current schema does not claim pothole dimensions, road names, field inspection, repair status, costs, or municipal actions. Human review is required before official use.
+
+## Run
+
+From backend/:
+
+~~~powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-```
-
-The dependency file is currently a placeholder while the backend modules are
-being implemented. Add runtime dependencies there before running the
-application.
-
-### Road ROI configuration
-
-The video pipeline optionally loads a road-specific segmentation model from
-`backend/models/segmentation_model.pt`. Set
-`ROAD_SEGMENTATION_MODEL_PATH` in `backend/.env` to use another local weights
-file. The model's road class defaults to class `0`; override it with
-`ROAD_SEGMENTATION_CLASS_ID` when needed. A missing model, empty mask, or
-unusable crop falls back to full-frame pothole detection.
-
-The mask is converted to a padded crop (`ROI_PADDING_RATIO`, default `0.15`).
-YOLO detections are translated back to the original video coordinates before
-they are persisted, while the output video shows the road mask and detections.
-The backend loads the `.pth` road checkpoint through MMSegmentation and uses
-the Ultralytics model only for pothole detection.
-Segmentation runs on frame 1 and every 20th frame by default
-(`ROI_SEGMENTATION_INTERVAL`); intervening frames reuse the latest mask
-geometry while YOLO still runs on each current frame.
-
-### Run the dashboard
-
-Install the backend dependencies, start the API, and start the dashboard in
-separate terminals:
-
-```powershell
-cd backend
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
 python run_api.py
-```
+~~~
 
-```powershell
-cd dashboard
-npm install
-npm run dev
-```
+In another terminal, run the video pipeline with **python -m app.main**. Start the dashboard separately from dashboard/ using **npm install** and **npm run dev**.
 
-The dashboard reads only from `GET /api/potholes`. Detection crops are stored
-as image BLOBs in SQLite and served by `GET /api/potholes/{id}/image`; no
-frontend seed or synthetic detection data is used. GPS values are shown when
-the backend begins persisting them; existing records correctly report GPS as
-unavailable.
-
-### Configuration
-
-Set local values in `backend/.env`. Do not commit credentials, API keys, or
-other secrets. The local database is stored at `backend/data/civicai.db`, and
-evidence crops are stored under `backend/storage/potholes/`.
-Set `VIDEO_PATH` in `backend/.env` to the absolute path of the video file to
-process. The default reference video is not included in Git because reference
-assets are ignored.
-
-## Development workflow
-
-1. Add or update a backend module under `backend/app/`.
-2. Keep model files in `backend/models/`.
-3. Store generated evidence under `backend/storage/`.
-4. Persist structured detection data in SQLite.
-5. Add tests alongside the feature before integrating it into the detection
-   workflow.
-
-## Planned capabilities
-
-- Video-file ingestion
-- Road-segmentation ROI preprocessing before pothole detection
-- Pothole detection and multi-frame tracking
-- GPS-aware infrastructure observations
-- Evidence image management
-- Interactive map and detection history
-- Area-level infrastructure summaries
-- AI-assisted report generation based on validated detections
-- Additional monitoring modules for footpaths, waste, road markings, and signs
-
-## Responsible use
-
-CivicAI is intended to support infrastructure inspection and prioritization.
-Model predictions should be reviewed and validated before being used for
-official decisions. Detection confidence is an indicator, not proof that an
-issue exists.
+Copy **.env.example** to **.env** and set only the paths and optional services you actually have. Never commit .env or API keys.
