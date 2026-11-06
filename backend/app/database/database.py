@@ -19,6 +19,7 @@ def get_connection():
     conn.execute("PRAGMA journal_mode=WAL")
 
     conn.execute("PRAGMA foreign_keys=ON")
+    conn.execute("PRAGMA busy_timeout=5000")
 
     return conn
 
@@ -97,6 +98,49 @@ def initialize_database():
                 REFERENCES pothole_tracks(id)
         )
     """)
+
+    # Backwards-compatible GPS fields on each frame observation.
+    observation_columns = {
+        row["name"]
+        for row in cursor.execute("PRAGMA table_info(observations)").fetchall()
+    }
+    gps_columns = {
+        "video_time_ms": "REAL",
+        "latitude": "REAL",
+        "longitude": "REAL",
+        "gps_accuracy_m": "REAL",
+        "location_source": "TEXT",
+        "is_simulated": "INTEGER NOT NULL DEFAULT 0",
+        "gps_association_method": "TEXT",
+        "gps_association_reason": "TEXT",
+        "gps_time_delta_ms": "REAL",
+    }
+    for name, definition in gps_columns.items():
+        if name not in observation_columns:
+            cursor.execute(f"ALTER TABLE observations ADD COLUMN {name} {definition}")
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS gps_samples (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT NOT NULL,
+            video_time_ms REAL NOT NULL,
+            latitude REAL NOT NULL,
+            longitude REAL NOT NULL,
+            accuracy_m REAL,
+            source TEXT NOT NULL CHECK(source IN ('real', 'synthetic')),
+            is_simulated INTEGER NOT NULL CHECK(is_simulated IN (0, 1)),
+            captured_at_utc TEXT,
+            UNIQUE(session_id, video_time_ms)
+        )
+    """)
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_gps_samples_session_time "
+        "ON gps_samples(session_id, video_time_ms)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_observations_track_time "
+        "ON observations(pothole_id, timestamp)"
+    )
 
     conn.commit()
 
