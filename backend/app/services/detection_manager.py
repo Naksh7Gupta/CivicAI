@@ -18,6 +18,7 @@ class DetectionManager:
         self.session_id = session_id
 
         self.crop_storage = CropStorage()
+        self.fallback_track_id = -1
 
     def process(self, frame, result, offset=(0, 0), video_time_ms=None):
 
@@ -29,7 +30,11 @@ class DetectionManager:
         coordinates = boxes.xyxy.cpu().numpy()
 
         if boxes.id is None:
-            track_ids = list(range(1, len(coordinates) + 1))
+            # Never reuse frame-local IDs across frames; that would falsely merge incidents.
+            track_ids = []
+            for _ in coordinates:
+                track_ids.append(self.fallback_track_id)
+                self.fallback_track_id -= 1
         else:
             track_ids = boxes.id.int().cpu().tolist()
 
