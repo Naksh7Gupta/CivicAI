@@ -1,0 +1,24 @@
+name: Backend unit tests
+
+on:
+  push:
+    branches:
+      - feature/gps-incident-reporting
+  pull_request:
+    branches:
+      - ROI
+      - main
+
+jobs:
+  backend-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install test dependency
+        run: python -m pip install python-dotenv
+      - name: Run backend unit tests
+        working-directory: backend
+        run: python -m unittest discover -s tests -v
