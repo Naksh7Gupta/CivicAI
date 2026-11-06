@@ -12,3 +12,8 @@ venv/
 # Other
 .pytest_cache/
 .mypy_cache/
+# Local configuration and generated runtime data
+/backend/.env
+/backend/data/*.db
+/backend/storage/
+/backend/.pytest_cache/
