@@ -18,6 +18,7 @@ class DetectionManager:
         self.crop_storage = CropStorage()
         self.gps_associator = gps_associator
         self.incident_aggregator = IncidentAggregator()
+        self._untracked_counter = 0
 
     def process(self, frame, result, offset=(0, 0), frame_elapsed_ms=None):
         boxes = result.boxes
@@ -26,7 +27,9 @@ class DetectionManager:
 
         coordinates = boxes.xyxy.cpu().numpy()
         if boxes.id is None:
-            track_ids = list(range(1, len(coordinates) + 1))
+            start = self._untracked_counter + 1
+            self._untracked_counter += len(coordinates)
+            track_ids = [-(start + index) for index in range(len(coordinates))]
         else:
             track_ids = boxes.id.int().cpu().tolist()
         confidences = boxes.conf.cpu().tolist()
