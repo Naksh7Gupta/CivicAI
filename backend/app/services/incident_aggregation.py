@@ -112,9 +112,16 @@ class IncidentAggregator:
                 ).fetchall()
                 candidate_dict = dict(location)
                 for candidate in candidates:
+                    candidate_location = {
+                        "latitude": candidate["latitude"],
+                        "longitude": candidate["longitude"],
+                        "accuracy_m": candidate["location_accuracy_m"],
+                        "location_source": candidate["location_source"],
+                        "is_simulated": candidate["is_simulated"],
+                    }
                     if can_merge_locations(
                         candidate_dict,
-                        dict(candidate),
+                        candidate_location,
                         radius_m=self.radius_m,
                         max_accuracy_m=self.max_accuracy_m,
                     ):
@@ -188,9 +195,11 @@ class IncidentAggregator:
         elif (
             location
             and incident["location_source"] == location["location_source"]
-            and incident["location_accuracy_m"] is not None
             and location["accuracy_m"] is not None
-            and location["accuracy_m"] < incident["location_accuracy_m"]
+            and (
+                incident["location_accuracy_m"] is None
+                or location["accuracy_m"] < incident["location_accuracy_m"]
+            )
         ):
             updates_location = True
 
