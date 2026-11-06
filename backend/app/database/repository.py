@@ -16,49 +16,33 @@ def create_track(
     confidence,
     bbox,
     crop_path,
-    image
+    image=None,
 ):
-
+    image_blob = image if image is not None else _read_image(crop_path)
     conn = get_connection()
-
-    cursor = conn.cursor()
-
-    cursor.execute("""
-        INSERT INTO pothole_tracks (
-
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO pothole_tracks (
+                session_id, track_id, first_seen, last_seen, best_confidence,
+                x1, y1, x2, y2, crop_path, image, image_mime
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'image/jpeg')
+        """, (
             session_id,
             track_id,
-            first_seen,
-            last_seen,
-            best_confidence,
-            x1, y1, x2, y2,
-            crop_path
-
-        )
-
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-
-    """, (
-
-        session_id,
-        track_id,
-        timestamp,
-        timestamp,
-        confidence,
-        *bbox,
-        crop_path,
-        _read_image(crop_path)
-
-    ))
-
-    pothole_id = cursor.lastrowid
-
-    conn.commit()
-
-    conn.close()
-
-    return pothole_id
-
+            timestamp,
+            timestamp,
+            confidence,
+            *bbox,
+            crop_path,
+            image_blob,
+        ))
+        pothole_id = cursor.lastrowid
+        conn.commit()
+        return pothole_id
+    finally:
+        conn.close()
 
 def get_track(session_id, track_id):
 
@@ -141,30 +125,22 @@ def add_observation(
     confidence,
     bbox
 ):
-
     conn = get_connection()
-
-    cursor = conn.cursor()
-
-    cursor.execute("""
-        INSERT INTO observations (
-
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO observations (
+                pothole_id, timestamp, confidence, x1, y1, x2, y2
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (
             pothole_id,
             timestamp,
             confidence,
-            x1, y1, x2, y2
-
-        )
-
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-
-    """, (
-        pothole_id,
-        timestamp,
-        confidence,
-        *bbox
-    ))
-
-    conn.commit()
-
-    conn.close()
+            *bbox
+        ))
+        observation_id = cursor.lastrowid
+        conn.commit()
+        return observation_id
+    finally:
+        conn.close()
