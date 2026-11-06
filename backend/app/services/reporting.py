@@ -285,18 +285,21 @@ class ReportingService:
                 INSERT INTO generated_reports (
                     report_type, target_id, model, prompt_version,
                     evidence_json, report_json, created_at
-                ) VALUES ('incident', ?, ?, ?, ?, ?, ?)
+                ) VALUES ('incident', ?, ?, ?, ?, '{}', ?)
                 """,
                 (
                     incident_id,
                     model,
                     PROMPT_VERSION,
                     json.dumps(evidence_packet, ensure_ascii=False),
-                    json.dumps(report, ensure_ascii=False),
                     report["generated_at"],
                 ),
             )
             report["report_id"] = cursor.lastrowid
+            connection.execute(
+                "UPDATE generated_reports SET report_json = ? WHERE id = ?",
+                (json.dumps(report, ensure_ascii=False), report["report_id"]),
+            )
             connection.commit()
         finally:
             connection.close()
