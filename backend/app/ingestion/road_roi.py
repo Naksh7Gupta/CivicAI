@@ -12,6 +12,7 @@ from app.core.config import (
     ROI_MIN_HEIGHT,
     ROI_MIN_WIDTH,
     ROI_PADDING_RATIO,
+    ROI_SEGMENTATION_INTERVAL,
     ROAD_SEGMENTATION_CLASS_ID,
     ROAD_SEGMENTATION_MODEL_PATH,
 )
@@ -31,8 +32,12 @@ class RoadROIProcessor:
     """Create a padded road crop and retain its coordinates in the source frame."""
 
     def __init__(self, device="cpu"):
+        if ROI_SEGMENTATION_INTERVAL < 1:
+            raise ValueError("ROI_SEGMENTATION_INTERVAL must be at least 1.")
         self.device = device
         self.model = None
+        self.frame_index = 0
+        self.cached_roi = None
         model_path = Path(ROAD_SEGMENTATION_MODEL_PATH)
         if model_path.exists():
             self.model = self._load_model(model_path)
@@ -99,12 +104,21 @@ class RoadROIProcessor:
         )
 
     def process(self, frame: np.ndarray) -> RoadROI:
+        self.frame_index += 1
+        if (
+            self.cached_roi is not None
+            and (self.frame_index - 1) % ROI_SEGMENTATION_INTERVAL != 0
+        ):
+            return self._apply_cached_roi(frame, self.cached_roi)
+
         height, width = frame.shape[:2]
         full_bounds = (0, 0, width, height)
         full_mask = np.ones((height, width), dtype=np.uint8)
 
         if self.model is None:
-            return RoadROI(frame, full_bounds, full_mask, True)
+            roi = RoadROI(frame, full_bounds, full_mask, True)
+            self.cached_roi = roi
+            return roi
 
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         resized = cv2.resize(rgb_frame, (1024, 512))
@@ -115,7 +129,9 @@ class RoadROIProcessor:
         std = tensor.new_tensor(
             [58.395, 57.12, 57.375]
         )[:, None, None]
-        tensor = ((tensor - mean) / std).unsqueeze(0)
+        tensor = ((tensor - mean) / std).unsqueeze(0).to(
+            self.device
+        )
         metadata = [
             {
                 "img_shape": resized.shape,
@@ -141,7 +157,9 @@ class RoadROIProcessor:
             or xs.max() - xs.min() + 1 < ROI_MIN_WIDTH
             or ys.max() - ys.min() + 1 < ROI_MIN_HEIGHT
         ):
-            return RoadROI(frame, full_bounds, full_mask, True)
+            roi = RoadROI(frame, full_bounds, full_mask, True)
+            self.cached_roi = roi
+            return roi
 
         padding_x = int((xs.max() - xs.min() + 1) * ROI_PADDING_RATIO)
         padding_y = int((ys.max() - ys.min() + 1) * ROI_PADDING_RATIO)
@@ -153,7 +171,37 @@ class RoadROIProcessor:
         crop = frame[y1:y2, x1:x2].copy()
         crop_mask = binary_mask[y1:y2, x1:x2]
         crop[crop_mask == 0] = 0
-        return RoadROI(crop, (x1, y1, x2, y2), binary_mask, False)
+        roi = RoadROI(crop, (x1, y1, x2, y2), binary_mask, False)
+        self.cached_roi = roi
+        return roi
+
+    @staticmethod
+    def _apply_cached_roi(frame: np.ndarray, cached_roi: RoadROI) -> RoadROI:
+        """Reuse the latest mask geometry while cropping the current frame."""
+        x1, y1, x2, y2 = cached_roi.bounds
+        height, width = frame.shape[:2]
+        if (
+            cached_roi.mask.shape != (height, width)
+            or x2 <= x1
+            or y2 <= y1
+        ):
+            return RoadROI(
+                frame,
+                (0, 0, width, height),
+                np.ones((height, width), dtype=np.uint8),
+                True,
+            )
+
+        crop = frame[y1:y2, x1:x2].copy()
+        crop_mask = cached_roi.mask[y1:y2, x1:x2]
+        if not cached_roi.used_fallback:
+            crop[crop_mask == 0] = 0
+        return RoadROI(
+            crop,
+            cached_roi.bounds,
+            cached_roi.mask,
+            cached_roi.used_fallback,
+        )
 
     @staticmethod
     def annotate(frame: np.ndarray, roi: RoadROI, result) -> np.ndarray:
@@ -165,8 +213,42 @@ class RoadROIProcessor:
             ).astype(np.uint8)
             annotated = cv2.addWeighted(annotated, 0.7, overlay, 0.3, 0)
 
-        plotted = result.plot()
         x1, y1, x2, y2 = roi.bounds
-        if (x2 - x1, y2 - y1) == plotted.shape[1::-1]:
-            annotated[y1:y2, x1:x2] = plotted
+        boxes = result.boxes
+        if boxes is None:
+            return annotated
+
+        coordinates = boxes.xyxy.cpu().numpy()
+        confidences = boxes.conf.cpu().tolist()
+        class_ids = boxes.cls.int().cpu().tolist()
+        names = result.names
+
+        for bbox, confidence, class_id in zip(
+            coordinates,
+            confidences,
+            class_ids,
+        ):
+            box_x1, box_y1, box_x2, box_y2 = map(int, bbox)
+            box_x1 = max(0, min(frame.shape[1] - 1, box_x1 + x1))
+            box_y1 = max(0, min(frame.shape[0] - 1, box_y1 + y1))
+            box_x2 = max(0, min(frame.shape[1] - 1, box_x2 + x1))
+            box_y2 = max(0, min(frame.shape[0] - 1, box_y2 + y1))
+
+            cv2.rectangle(
+                annotated,
+                (box_x1, box_y1),
+                (box_x2, box_y2),
+                (0, 0, 255),
+                2,
+            )
+            label = f"{names[class_id]} {confidence:.2f}"
+            cv2.putText(
+                annotated,
+                label,
+                (box_x1, max(20, box_y1 - 8)),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.6,
+                (0, 0, 255),
+                2,
+            )
         return annotated

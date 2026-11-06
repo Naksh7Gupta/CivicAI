@@ -107,6 +107,9 @@ YOLO detections are translated back to the original video coordinates before
 they are persisted, while the output video shows the road mask and detections.
 The backend loads the `.pth` road checkpoint through MMSegmentation and uses
 the Ultralytics model only for pothole detection.
+Segmentation runs on frame 1 and every 20th frame by default
+(`ROI_SEGMENTATION_INTERVAL`); intervening frames reuse the latest mask
+geometry while YOLO still runs on each current frame.
 
 ### Run the dashboard
 
@@ -137,6 +140,9 @@ unavailable.
 Set local values in `backend/.env`. Do not commit credentials, API keys, or
 other secrets. The local database is stored at `backend/data/civicai.db`, and
 evidence crops are stored under `backend/storage/potholes/`.
+Set `VIDEO_PATH` in `backend/.env` to the absolute path of the video file to
+process. The default reference video is not included in Git because reference
+assets are ignored.
 
 ## Development workflow
 

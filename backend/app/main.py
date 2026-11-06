@@ -4,7 +4,7 @@ import uuid
 import cv2
 import torch
 
-from app.core.config import BASE_DIR
+from app.core.config import OUTPUT_VIDEO_PATH, VIDEO_PATH
 from app.database.database import initialize_database
 
 from app.ingestion.stream_receiver import StreamReceiver
@@ -30,9 +30,14 @@ def main():
 
     # Initialize components
 
-    video_path = BASE_DIR.parent / "references" / "20250118_171213_clip01of01.mp4"
-    output_path = BASE_DIR.parent / "references" / "pothole_detection_output.mp4"
-    receiver = StreamReceiver(str(video_path))
+    output_path = OUTPUT_VIDEO_PATH
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    if not VIDEO_PATH.is_file():
+        raise FileNotFoundError(
+            f"Video file was not found: {VIDEO_PATH}. "
+            "Set VIDEO_PATH in backend/.env to an uploaded video."
+        )
+    receiver = StreamReceiver(str(VIDEO_PATH))
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("Using device:", device)
@@ -46,7 +51,7 @@ def main():
 
     receiver.start()
 
-    print("Video connected.")
+    print("Video connected:", VIDEO_PATH)
     print("Saving annotated video to:", output_path)
     writer = None
 

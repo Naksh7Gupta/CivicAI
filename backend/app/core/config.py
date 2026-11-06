@@ -8,6 +8,18 @@ load_dotenv()
 BASE_DIR = Path(__file__).resolve().parents[2]
 
 MODEL_PATH = BASE_DIR / "models" / "pothole.pt"
+VIDEO_PATH = Path(
+    os.getenv(
+        "VIDEO_PATH",
+        str(BASE_DIR.parent / "references" / "20250118_171213_clip01of01.mp4"),
+    )
+)
+OUTPUT_VIDEO_PATH = Path(
+    os.getenv(
+        "OUTPUT_VIDEO_PATH",
+        str(BASE_DIR.parent / "references" / "pothole_detection_output.mp4"),
+    )
+)
 ROAD_SEGMENTATION_MODEL_PATH = Path(
     os.getenv(
         "ROAD_SEGMENTATION_MODEL_PATH",
@@ -36,3 +48,6 @@ ROI_PADDING_RATIO = float(os.getenv("ROI_PADDING_RATIO", "0.15"))
 ROI_MIN_AREA_RATIO = float(os.getenv("ROI_MIN_AREA_RATIO", "0.05"))
 ROI_MIN_WIDTH = int(os.getenv("ROI_MIN_WIDTH", "64"))
 ROI_MIN_HEIGHT = int(os.getenv("ROI_MIN_HEIGHT", "64"))
+ROI_SEGMENTATION_INTERVAL = int(
+    os.getenv("ROI_SEGMENTATION_INTERVAL", "20")
+)
