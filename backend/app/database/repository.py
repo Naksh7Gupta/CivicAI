@@ -164,7 +164,8 @@ def add_observation(
         pothole_id,
         timestamp,
         confidence,
-        *bbox
+        *bbox,
+        video_time_ms
     ))
 
     conn.commit()
