@@ -33,7 +33,8 @@ def test_gps_samples_backfill_observations_and_create_track_incident(monkeypatch
     reprocessed = associate_session_observations("session-1")
 
     assert saved == 1
-    assert reprocessed == 1
+    assert reprocessed["observations_processed"] == 1
+    assert reprocessed["observations_associated"] == 1
     incident = list_incidents("session-1")[0]
     assert incident["observation_count"] == 1
     assert incident["latitude"] == 29.6857
