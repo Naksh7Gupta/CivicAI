@@ -130,11 +130,9 @@ def update_track(
 
         """, (timestamp, pothole_id))
 
-    observation_id = cursor.lastrowid
     conn.commit()
 
     conn.close()
-    return observation_id
 
 
 def add_observation(
@@ -170,6 +168,8 @@ def add_observation(
         video_time_ms
     ))
 
+    observation_id = cursor.lastrowid
     conn.commit()
 
     conn.close()
+    return observation_id
