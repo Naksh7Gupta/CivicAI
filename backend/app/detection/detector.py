@@ -9,8 +9,9 @@ from app.core.config import (
 
 class PotholeDetector:
 
-    def __init__(self):
+    def __init__(self, device="cpu"):
 
+        self.device = device
         self.model = YOLO(str(MODEL_PATH))
 
     def detect(self, frame):
@@ -25,6 +26,8 @@ class PotholeDetector:
 
             conf=CONFIDENCE_THRESHOLD,
 
+            device=self.device,
+
             verbose=False
 
         )
@@ -36,6 +39,7 @@ class PotholeDetector:
         results = self.model.predict(
             image,
             conf=CONFIDENCE_THRESHOLD,
+            device=self.device,
             verbose=False
         )
 

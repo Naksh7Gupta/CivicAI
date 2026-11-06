@@ -1,5 +1,6 @@
 """Database connection management."""
 import sqlite3
+from pathlib import Path
 
 from app.core.config import DATABASE_PATH
 
@@ -49,10 +50,32 @@ def initialize_database():
             y2 INTEGER,
 
             crop_path TEXT,
+            image BLOB,
+            image_mime TEXT NOT NULL DEFAULT 'image/jpeg',
 
             UNIQUE(session_id, track_id)
         )
     """)
+
+    columns = {
+        row["name"]
+        for row in cursor.execute("PRAGMA table_info(pothole_tracks)").fetchall()
+    }
+    if "image" not in columns:
+        cursor.execute("ALTER TABLE pothole_tracks ADD COLUMN image BLOB")
+    if "image_mime" not in columns:
+        cursor.execute(
+            "ALTER TABLE pothole_tracks ADD COLUMN image_mime TEXT NOT NULL DEFAULT 'image/jpeg'"
+        )
+    for row in cursor.execute(
+        "SELECT id, crop_path FROM pothole_tracks WHERE image IS NULL AND crop_path IS NOT NULL"
+    ).fetchall():
+        image_path = Path(row["crop_path"])
+        if image_path.is_file():
+            cursor.execute(
+                "UPDATE pothole_tracks SET image = ?, image_mime = 'image/jpeg' WHERE id = ?",
+                (image_path.read_bytes(), row["id"]),
+            )
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS observations (

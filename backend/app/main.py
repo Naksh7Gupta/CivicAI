@@ -2,6 +2,7 @@
 import uuid
 
 import cv2
+import torch
 
 from app.core.config import BASE_DIR
 from app.database.database import initialize_database
@@ -36,7 +37,12 @@ def main():
     )
     receiver = StreamReceiver(str(video_path))
 
-    detector = PotholeDetector()
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print("Using device:", device)
+    if device.type == "cuda":
+        print("GPU:", torch.cuda.get_device_name(0))
+
+    detector = PotholeDetector(device=device)
 
     manager = DetectionManager(session_id)
 

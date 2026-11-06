@@ -2,13 +2,21 @@
 from app.database.database import get_connection
 
 
+def _read_image(crop_path):
+    if not crop_path:
+        return None
+    with open(crop_path, "rb") as image_file:
+        return image_file.read()
+
+
 def create_track(
     session_id,
     track_id,
     timestamp,
     confidence,
     bbox,
-    crop_path
+    crop_path,
+    image
 ):
 
     conn = get_connection()
@@ -28,7 +36,7 @@ def create_track(
 
         )
 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 
     """, (
 
@@ -38,7 +46,8 @@ def create_track(
         timestamp,
         confidence,
         *bbox,
-        crop_path
+        crop_path,
+        _read_image(crop_path)
 
     ))
 
@@ -95,7 +104,9 @@ def update_track(
                 y1 = ?,
                 x2 = ?,
                 y2 = ?,
-                crop_path = ?
+                crop_path = ?,
+                image = ?,
+                image_mime = 'image/jpeg'
 
             WHERE id = ?
 
@@ -104,6 +115,7 @@ def update_track(
             confidence,
             *bbox,
             crop_path,
+            _read_image(crop_path),
             pothole_id
         ))
 

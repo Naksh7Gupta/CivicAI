@@ -66,6 +66,7 @@ CivicAI/
 │   │   └── potholes/          # Stored detection crops
 │   ├── .env                   # Local environment configuration
 │   └── requirements.txt       # Python dependencies
+├── dashboard/                 # React/Vite operations dashboard
 └── references/                # Reference images, notebook, and source model
 ```
 
@@ -91,6 +92,30 @@ pip install -r requirements.txt
 The dependency file is currently a placeholder while the backend modules are
 being implemented. Add runtime dependencies there before running the
 application.
+
+### Run the dashboard
+
+Install the backend dependencies, start the API, and start the dashboard in
+separate terminals:
+
+```powershell
+cd backend
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+python run_api.py
+```
+
+```powershell
+cd dashboard
+npm install
+npm run dev
+```
+
+The dashboard reads only from `GET /api/potholes`. Detection crops are stored
+as image BLOBs in SQLite and served by `GET /api/potholes/{id}/image`; no
+frontend seed or synthetic detection data is used. GPS values are shown when
+the backend begins persisting them; existing records correctly report GPS as
+unavailable.
 
 ### Configuration
 
