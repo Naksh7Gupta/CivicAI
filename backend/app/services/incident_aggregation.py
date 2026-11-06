@@ -195,6 +195,7 @@ class IncidentAggregator:
         elif (
             location
             and incident["location_source"] == location["location_source"]
+            and incident["is_simulated"] == int(location["is_simulated"])
             and location["accuracy_m"] is not None
             and (
                 incident["location_accuracy_m"] is None
