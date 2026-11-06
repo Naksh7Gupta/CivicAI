@@ -105,6 +105,7 @@ def associate_session_observations(session_id: str) -> int:
             """,
             (session_id,),
         ).fetchall()
+        associated_count = 0
         for row in rows:
             if row["video_time_ms"] is None:
                 association = GPSAssociation(
@@ -112,8 +113,15 @@ def associate_session_observations(session_id: str) -> int:
                 )
             else:
                 association = associate_position(row["video_time_ms"], samples)
+            if association.status == "associated":
+                associated_count += 1
             _write_association(conn, row["id"], association)
         conn.commit()
-        return sum(1 for row in rows if row["video_time_ms"] is not None and samples)
+        processed = len(rows)
+        return {
+            "observations_processed": processed,
+            "observations_associated": associated_count,
+            "observations_unavailable": processed - associated_count,
+        }
     finally:
         conn.close()
