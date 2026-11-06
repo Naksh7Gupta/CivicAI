@@ -73,7 +73,8 @@ def main():
             manager.process(
                 frame,
                 result,
-                offset=roi.bounds[:2]
+                offset=roi.bounds[:2],
+                video_time_ms=receiver.last_timestamp_ms,
             )
 
             # Display detections
