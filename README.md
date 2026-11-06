@@ -171,3 +171,70 @@ CivicAI is intended to support infrastructure inspection and prioritization.
 Model predictions should be reviewed and validated before being used for
 official decisions. Detection confidence is an indicator, not proof that an
 issue exists.
+
+
+## GPS association and incident reports
+
+The reporting layer aligns each detection observation with a GPS sidecar using
+**video-relative milliseconds**. The video reader records the current frame
+position; GPS samples must use the same recording timeline. A phone recorder
+should timestamp GPS samples from the same monotonic recording clock used for
+the video. Wall-clock processing time is retained separately and must not be
+mistaken for the original capture time.
+
+Upload a session's GPS sidecar to:
+
+`POST /api/sessions/{session_id}/gps-samples`
+
+The JSON body contains a `samples` array. Each sample requires
+`video_time_ms`, `latitude`, `longitude`, and `source` (`real` or
+`synthetic`); `accuracy_m` and `captured_at_utc` are optional. Synthetic
+samples are automatically marked as simulated. The API re-associates existing
+observations after upload, so GPS can be supplied before or after video
+processing. Samples with missing/poor accuracy, invalid coordinates, mixed
+real/synthetic interpolation, or timestamps outside the matching tolerance
+remain unlocated rather than being guessed.
+
+The current location is the **recording vehicle/phone position estimate**.
+It is not the exact pothole location because camera direction, distance, and
+road geometry have not been calibrated. Reverse geocoding and pothole-point
+projection are not implemented yet.
+
+### Incident aggregation
+
+`GET /api/incidents` returns one track-level incident per
+`(session_id, tracker_id)`, with repeated frame observations aggregated into
+an observation count and a best-accuracy associated vehicle position.
+Cross-session duplicate merging is intentionally disabled until a calibrated
+pothole-position estimate is available; otherwise nearby but different road
+defects could be merged incorrectly.
+
+### Reports
+
+- `GET /api/reports/incidents/{track_record_id}` returns verified database
+  facts, evidence observations, GPS provenance, limitations, and optional LLM
+  narrative.
+- `GET /api/reports/summary` returns deterministic database/session counts
+  and an optional LLM summary.
+
+The LLM uses an OpenAI-compatible chat-completions endpoint. Configure these
+values in your local, untracked `backend/.env`:
+
+- `CIVICAI_LLM_BASE_URL` (defaults to `https://api.openai.com/v1`)
+- `CIVICAI_LLM_API_KEY`
+- `CIVICAI_LLM_MODEL`
+- `CIVICAI_LLM_TIMEOUT_SECONDS` (defaults to 25)
+
+Without an API key and model, the endpoints still return deterministic facts and
+report `narrative.status = not_configured`. Detection confidence is never
+converted into physical severity. Field checks are recommendations, not
+claims that an inspection or repair has happened.
+
+### Tests
+
+From `backend/` install development dependencies and run:
+
+```bash
+pip install -r requirements-dev.txt
+pytest -q
+```
