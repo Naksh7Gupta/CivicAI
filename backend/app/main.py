@@ -4,7 +4,7 @@ import uuid
 import cv2
 import torch
 
-from app.core.config import OUTPUT_VIDEO_PATH, VIDEO_PATH
+from app.core.config import GPS_TRACE_PATH, OUTPUT_VIDEO_PATH, VIDEO_PATH
 from app.database.database import initialize_database
 
 from app.ingestion.stream_receiver import StreamReceiver
@@ -13,6 +13,8 @@ from app.ingestion.road_roi import RoadROIProcessor
 from app.detection.detector import PotholeDetector
 
 from app.services.detection_manager import DetectionManager
+from app.services.gps_association import GPSAssociator, load_gps_csv
+from app.database.reporting_repository import save_gps_samples
 
 
 def main():
@@ -47,7 +49,18 @@ def main():
     detector = PotholeDetector(device=device)
     roi_processor = RoadROIProcessor(device=device)
 
-    manager = DetectionManager(session_id)
+    gps_associator = None
+    if GPS_TRACE_PATH is not None:
+        if not GPS_TRACE_PATH.is_file():
+            raise FileNotFoundError(f"GPS trace was not found: {GPS_TRACE_PATH}")
+        gps_samples = load_gps_csv(GPS_TRACE_PATH)
+        save_gps_samples(session_id, gps_samples)
+        gps_associator = GPSAssociator(gps_samples)
+        print(f"Loaded {len(gps_samples)} GPS samples from {GPS_TRACE_PATH}")
+    else:
+        print("No GPS trace configured; detections will be stored without coordinates.")
+
+    manager = DetectionManager(session_id, gps_associator=gps_associator)
 
     receiver.start()
 
@@ -59,7 +72,7 @@ def main():
 
         while True:
 
-            frame = receiver.read()
+            frame, frame_elapsed_ms = receiver.read_with_timestamp()
 
             if frame is None:
                 break
@@ -73,7 +86,8 @@ def main():
             manager.process(
                 frame,
                 result,
-                offset=roi.bounds[:2]
+                offset=roi.bounds[:2],
+                frame_elapsed_ms=frame_elapsed_ms,
             )
 
             # Display detections
