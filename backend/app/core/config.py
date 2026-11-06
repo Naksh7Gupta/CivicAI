@@ -6,7 +6,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parents[2]
-
 MODEL_PATH = BASE_DIR / "models" / "pothole.pt"
 VIDEO_PATH = Path(
     os.getenv(
@@ -26,28 +25,22 @@ ROAD_SEGMENTATION_MODEL_PATH = Path(
         str(BASE_DIR / "models" / "segmentation_model.pth"),
     )
 )
-
 DATABASE_PATH = BASE_DIR / "data" / "civicai.db"
-
 CROP_DIR = BASE_DIR / "storage" / "potholes"
-
 FRAME_WIDTH = 640
-
 FRAME_HEIGHT = 640
-
 CONFIDENCE_THRESHOLD = 0.7
-
 IOU_THRESHOLD = 0.7
-
 TRACKER = "bytetrack.yaml"
-
-ROAD_SEGMENTATION_CLASS_ID = int(
-    os.getenv("ROAD_SEGMENTATION_CLASS_ID", "0")
-)
+ROAD_SEGMENTATION_CLASS_ID = int(os.getenv("ROAD_SEGMENTATION_CLASS_ID", "0"))
 ROI_PADDING_RATIO = float(os.getenv("ROI_PADDING_RATIO", "0.15"))
 ROI_MIN_AREA_RATIO = float(os.getenv("ROI_MIN_AREA_RATIO", "0.05"))
 ROI_MIN_WIDTH = int(os.getenv("ROI_MIN_WIDTH", "64"))
 ROI_MIN_HEIGHT = int(os.getenv("ROI_MIN_HEIGHT", "64"))
-ROI_SEGMENTATION_INTERVAL = int(
-    os.getenv("ROI_SEGMENTATION_INTERVAL", "20")
-)
+ROI_SEGMENTATION_INTERVAL = int(os.getenv("ROI_SEGMENTATION_INTERVAL", "20"))
+
+GPS_TRACK_CSV = os.getenv("GPS_TRACK_CSV", "").strip()
+GPS_TRACK_CSV = Path(GPS_TRACK_CSV) if GPS_TRACK_CSV else None
+VIDEO_START_TIME_UTC = os.getenv("VIDEO_START_TIME_UTC", "").strip() or None
+GPS_MAX_DELTA_SECONDS = float(os.getenv("GPS_MAX_DELTA_SECONDS", "2.0"))
+GPS_MAX_ACCURACY_M = float(os.getenv("GPS_MAX_ACCURACY_M", "50.0"))
