@@ -7,7 +7,7 @@ type Pothole = {
   latitude: number | null
   longitude: number | null
   confidence: number
-  severity: 'High' | 'Medium' | 'Low'
+  severity: 'Unassessed'
   address: string
   status: 'Needs review' | 'Reported' | 'Monitoring'
 }
@@ -49,7 +49,7 @@ function App() {
   const [loadError, setLoadError] = useState('')
   const selected = potholes.find((item) => item.id === selectedId) ?? potholes[0]
   const filtered = potholes.filter((item) => `${item.id} ${item.address}`.toLowerCase().includes(query.toLowerCase()))
-  const highPriority = potholes.filter((item) => item.severity === 'High').length
+  const severityAssessed = potholes.filter((item) => item.severity !== 'Unassessed').length
   const averageConfidence = potholes.length ? Math.round((potholes.reduce((sum, item) => sum + item.confidence, 0) / potholes.length) * 100) : 0
   const detectionsLast24Hours = potholes.filter((item) => Date.now() - new Date(item.timestamp).getTime() <= 24 * 60 * 60 * 1000).length
   const locationsCovered = new Set(potholes.filter((item) => item.latitude !== null && item.longitude !== null).map((item) => `${item.latitude},${item.longitude}`)).size
@@ -77,7 +77,7 @@ function App() {
     return () => { active = false }
   }, [])
 
-  const report = useMemo(() => selected ? `Detected ${selected.severity.toLowerCase()}-priority road surface damage at ${selected.address}. Computer vision confidence is ${Math.round(selected.confidence * 100)}%, captured ${formatTime(selected.timestamp)}. Recommend field verification and repair triage.` : '', [selected])
+  const report = useMemo(() => selected ? `CivicAI recorded a pothole detection candidate at ${selected.address}. Model confidence is ${Math.round(selected.confidence * 100)}%, processed ${formatTime(selected.timestamp)}. Physical severity, dimensions, and repair status have not been assessed by this system.` : '', [selected])
 
   return (
     <div className="app-shell">
@@ -104,7 +104,7 @@ function App() {
           </div>
           <div className="lower-grid">
             <section className="panel gallery-panel"><div className="panel-heading"><div><p className="eyebrow">RECENT EVIDENCE</p><h2>Captured potholes <span className="count-badge">{filtered.length}</span></h2></div><button className="text-button" onClick={() => setActiveNav('Evidence gallery')}>View gallery {icon('arrow')}</button></div><div className="gallery-grid">{filtered.slice(0, 4).map((item) => <button className={`evidence-card ${item.id === selectedId ? 'selected' : ''}`} key={item.id} onClick={() => setSelectedId(item.id)}><div className="evidence-image"><img src={item.image_url} alt={`Evidence for ${item.id}`} /><span className={`confidence ${item.severity.toLowerCase()}`}>{Math.round(item.confidence * 100)}%</span><span className="image-expand">↗</span></div><div className="evidence-meta"><div><b>{item.id}</b><small>{formatTime(item.timestamp)} <span>•</span> {item.address}</small></div><span className={`severity ${item.severity.toLowerCase()}`}>{item.severity}</span></div></button>)}</div></section>
-            <section className="panel detail-panel"><div className="panel-heading"><div><p className="eyebrow">SELECTED INCIDENT</p><h2>{selected?.id ?? 'No selection'}</h2></div><button className="more-button">•••</button></div>{selected && <><div className="detail-image"><img src={selected.image_url} alt="" /><span className="verified-tag">✓ AI verified</span></div><div className="detail-fields"><div><small>LOCATION</small><b>{selected.address}</b><span>{selected.latitude !== null && selected.longitude !== null ? `${selected.latitude.toFixed(4)}° N, ${Math.abs(selected.longitude).toFixed(4)}° W` : 'GPS coordinates unavailable'}</span></div><div><small>CAPTURED</small><b>{formatTime(selected.timestamp)}</b><span>Persisted detection record</span></div><div><small>MODEL CONFIDENCE</small><b>{Math.round(selected.confidence * 100)}% <span className={`severity ${selected.severity.toLowerCase()}`}>{selected.severity}</span></b><span>Above review threshold</span></div></div><div className="report-box"><small>AUTO-GENERATED INCIDENT REPORT</small><p>{report}</p></div><button className="button primary full" onClick={() => setActiveNav('Reports')}>Open full incident report {icon('arrow')}</button></>}</section>
+            <section className="panel detail-panel"><div className="panel-heading"><div><p className="eyebrow">SELECTED INCIDENT</p><h2>{selected?.id ?? 'No selection'}</h2></div><button className="more-button">•••</button></div>{selected && <><div className="detail-image"><img src={selected.image_url} alt="" /><span className="verified-tag">AI detected</span></div><div className="detail-fields"><div><small>LOCATION</small><b>{selected.address}</b><span>{selected.latitude !== null && selected.longitude !== null ? `${selected.latitude.toFixed(4)}° N, ${Math.abs(selected.longitude).toFixed(4)}° W` : 'GPS coordinates unavailable'}</span></div><div><small>CAPTURED</small><b>{formatTime(selected.timestamp)}</b><span>Persisted detection record</span></div><div><small>MODEL CONFIDENCE</small><b>{Math.round(selected.confidence * 100)}% <span className={`severity ${selected.severity.toLowerCase()}`}>{selected.severity}</span></b><span>Confidence is not severity</span></div></div><div className="report-box"><small>AUTO-GENERATED INCIDENT REPORT</small><p>{report}</p></div><button className="button primary full" onClick={() => setActiveNav('Reports')}>Open full incident report {icon('arrow')}</button></>}</section>
           </div>
         </section>
       </main>
