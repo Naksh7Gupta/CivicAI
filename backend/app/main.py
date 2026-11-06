@@ -13,6 +13,7 @@ from app.ingestion.road_roi import RoadROIProcessor
 from app.detection.detector import PotholeDetector
 
 from app.services.detection_manager import DetectionManager
+from app.services.gps_repository import associate_session_observations
 
 
 def main():
@@ -96,6 +97,9 @@ def main():
                     )
 
             writer.write(annotated_frame)
+
+        gps_counts = associate_session_observations(session_id)
+        print("GPS association:", gps_counts)
 
     finally:
 
