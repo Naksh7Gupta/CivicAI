@@ -94,9 +94,7 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-The dependency file is currently a placeholder while the backend modules are
-being implemented. Add runtime dependencies there before running the
-application.
+Backend runtime dependencies are listed in `backend/requirements.txt`.
 
 ### Run the dashboard
 
@@ -133,7 +131,9 @@ recording start time in ISO-8601 format with a timezone. Set
 If the start time is unknown, GPS will not be attached to those video frames.
 
 GPS CSV files require `recorded_at,latitude,longitude,accuracy_m`, with
-timezone-aware ISO-8601 timestamps. Import fixes from the backend directory:
+timezone-aware ISO-8601 timestamps. Import the CSV **before running the video**
+so the frame processor can look up fixes during inference. Use the same session
+ID in the import command and `CIVICAI_SESSION_ID`. Import from the backend directory:
 
 ```powershell
 python import_gps.py --session-id your-session-id --csv path\to\gps.csv --source synthetic --simulated
