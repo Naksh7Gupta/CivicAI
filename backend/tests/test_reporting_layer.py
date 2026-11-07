@@ -9,11 +9,13 @@ from unittest.mock import patch
 import numpy as np
 
 from app.database import database
+from app.database.repository import add_observation, create_track, link_track_to_incident
 from app.geolocation.association import GPSFix, GPSValidationError, associate_gps_fixes
 from app.geolocation.csv_import import import_gps_csv
 from app.geolocation.repository import save_gps_fix, associate_session_fix
 from app.services.detection_manager import DetectionManager
-from app.services.reporting import build_incident_context, generate_incident_report
+from app.services.reporting import (LLMConfigurationError, OpenAICompatibleClient,
+                                     build_incident_context, generate_incident_report)
 
 
 class FakeTensor:
@@ -117,6 +119,25 @@ class ReportingLayerTests(unittest.TestCase):
         count = connection.execute("SELECT COUNT(*) FROM incidents").fetchone()[0]
         connection.close()
         self.assertEqual(count, 2)
+
+    def test_legacy_track_observations_are_backfilled_to_incident(self):
+        track_id = create_track("legacy-session", 3, "t1", 0.8, (1, 2, 3, 4), None)
+        add_observation(track_id, "t1", 0.8, (1, 2, 3, 4))
+        incident_id = 1
+        from app.services.incident_aggregator import create_incident
+        incident_id = create_incident("legacy-session", 3, "t2", 0.9)
+        link_track_to_incident(track_id, incident_id)
+        connection = database.get_connection()
+        incident = connection.execute("SELECT * FROM incidents WHERE id=?", (incident_id,)).fetchone()
+        observation = connection.execute("SELECT * FROM observations WHERE pothole_id=?", (track_id,)).fetchone()
+        connection.close()
+        self.assertEqual(incident["observation_count"], 1)
+        self.assertEqual(observation["incident_id"], incident_id)
+
+    def test_missing_llm_configuration_fails_clearly(self):
+        with patch.dict("os.environ", {}, clear=True):
+            with self.assertRaises(LLMConfigurationError):
+                OpenAICompatibleClient.from_environment()
 
     def test_report_context_marks_missing_and_simulated_facts(self):
         connection = database.get_connection()
