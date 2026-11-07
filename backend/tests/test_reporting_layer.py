@@ -82,6 +82,17 @@ class ReportingLayerTests(unittest.TestCase):
         self.assertEqual(result.method, "linear_interpolation")
         self.assertTrue(result.is_simulated)
 
+    def test_poor_accuracy_fix_does_not_hide_nearby_accurate_fix(self):
+        save_gps_fix("quality-session", self.start, 29.68, 76.98, 4.0)
+        save_gps_fix("quality-session", self.start + timedelta(seconds=1),
+                     29.681, 76.981, 40.0)
+        result = associate_session_fix(
+            "quality-session", self.start + timedelta(milliseconds=1100)
+        )
+        self.assertIsNotNone(result)
+        self.assertEqual(result.method, "nearest")
+        self.assertEqual(result.latitude, 29.68)
+
     def test_detection_manager_groups_same_tracker_and_persists_gps_provenance(self):
         save_gps_fix("session-track", self.start, 29.68, 76.98, 4,
                      source="synthetic", is_simulated=True)
