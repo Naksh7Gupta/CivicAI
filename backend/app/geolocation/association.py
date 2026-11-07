@@ -46,6 +46,8 @@ class GPSFix:
             raise GPSValidationError("GPS source must be specified.")
         if self.source == "synthetic" and not self.is_simulated:
             raise GPSValidationError("Synthetic GPS fixes must be marked as simulated.")
+        if self.source == "gps" and self.is_simulated:
+            raise GPSValidationError("Real GPS fixes cannot be marked as simulated.")
         return GPSFix(timestamp, lat, lon, accuracy, self.source.strip(), bool(self.is_simulated), self.id)
 
 
