@@ -31,12 +31,12 @@ class DetectionManager:
             track_ids = boxes.id.int().cpu().tolist()
         confidences = boxes.conf.cpu().tolist()
 
-        processed_at = datetime.now(timezone.utc).isoformat()
         frame_time_iso = None
         gps_association = None
         if frame_timestamp is not None:
             frame_time_iso = parse_timestamp(frame_timestamp).isoformat()
             gps_association = associate_session_fix(self.session_id, frame_time_iso)
+        timestamp = frame_time_iso or datetime.now(timezone.utc).isoformat()
 
         for raw_bbox, track_id, confidence in zip(coordinates, track_ids, confidences):
             bbox = tuple(map(int, raw_bbox))
@@ -44,10 +44,10 @@ class DetectionManager:
             if existing is None:
                 crop_path = self.crop_storage.save_crop(frame, bbox, self.session_id, track_id)
                 incident_id = create_incident(
-                    self.session_id, track_id, processed_at, confidence, gps_association
+                    self.session_id, track_id, timestamp, confidence, gps_association
                 )
                 pothole_id = create_track(
-                    self.session_id, track_id, processed_at, confidence, bbox,
+                    self.session_id, track_id, timestamp, confidence, bbox,
                     crop_path, incident_id=incident_id,
                 )
                 print(f"[NEW POTHOLE TRACK] ID={track_id} Confidence={confidence:.2f}")
@@ -56,17 +56,17 @@ class DetectionManager:
                 incident_id = existing["incident_id"]
                 if incident_id is None:
                     incident_id = create_incident(
-                        self.session_id, track_id, processed_at, confidence, gps_association
+                        self.session_id, track_id, timestamp, confidence, gps_association
                     )
                     link_track_to_incident(pothole_id, incident_id)
                 crop_path = None
                 if confidence > existing["best_confidence"]:
                     crop_path = self.crop_storage.save_crop(frame, bbox, self.session_id, track_id)
-                update_track(pothole_id, processed_at, confidence, bbox, crop_path)
+                update_track(pothole_id, timestamp, confidence, bbox, crop_path)
 
-            record_incident_observation(incident_id, processed_at, confidence, gps_association)
+            record_incident_observation(incident_id, timestamp, confidence, gps_association)
             add_observation(
-                pothole_id, processed_at, confidence, bbox,
+                pothole_id, timestamp, confidence, bbox,
                 incident_id=incident_id, frame_timestamp=frame_time_iso,
                 gps_association=gps_association,
             )
