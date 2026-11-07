@@ -190,11 +190,13 @@ def build_area_context(start=None, end=None):
     } for row in rows]
     return {
         "period": {"start": start, "end": end},
+        "scope": "All persisted incidents in the selected time window; no polygon or administrative boundary filter is applied.",
         "incident_count": len(incidents),
         "observation_count": sum(item["observation_count"] for item in incidents),
         "incidents": incidents,
         "limitations": [
             "Counts are tracker-level records, not independently field-verified potholes.",
+            "No geographic boundary or administrative-area filter is applied to this summary.",
             "Camera GPS is an estimate of recording-device position, not surveyed defect coordinates.",
             "Simulated coordinates are not real locations.",
             "Model confidence is not a physical severity or repair status.",
