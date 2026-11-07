@@ -7,7 +7,6 @@ type Pothole = {
   latitude: number | null
   longitude: number | null
   confidence: number
-  severity: 'Unassessed'
   incident_id: number | null
   gps_accuracy_m: number | null
   location_source: string | null
@@ -93,6 +92,11 @@ function App() {
   }
 
   useEffect(() => {
+    setReportNarrative('')
+    setReportError('')
+  }, [selectedId])
+
+  useEffect(() => {
     let active = true
     fetch('/api/potholes')
       .then((response) => {
@@ -132,7 +136,7 @@ function App() {
           {!loading && loadError && <div className="data-state error">Unable to load real detections: {loadError}</div>}
           {!loading && !loadError && potholes.length === 0 && <div className="data-state">No pothole detections have been persisted yet.</div>}
           <div className="intro-row"><div><p className="eyebrow">CIVICAI OPERATIONS <span className="dot" /> LIVE DATABASE</p><h1>Infrastructure intelligence <span>✦</span></h1><p className="subheading">A live view of persisted pothole detections from the CivicAI backend.</p></div><div className="intro-actions"><button className="button primary" onClick={() => window.print()}>{icon('download')} Export report</button></div></div>
-          <div className="stat-grid"><StatCard label="Total detections" value={potholes.length.toString()} delta="Persisted" note="in CivicAI database" iconName="pin" accent="mint" /><StatCard label="Needs field review" value={needsReview.toString().padStart(2, '0')} delta="Unverified tracks" note="model detections only" iconName="chart" accent="orange" /><StatCard label="Avg. confidence" value={`${averageConfidence}%`} delta="Database average" note="across detections" iconName="chart" accent="blue" /><StatCard label="GPS locations" value={locationsCovered.toString()} delta="Available coordinates" note="from persisted records" iconName="map" accent="purple" /></div>
+          <div className="stat-grid"><StatCard label="Tracked incidents" value={potholes.length.toString()} delta="Persisted" note="tracker-level records" iconName="pin" accent="mint" /><StatCard label="Needs field review" value={needsReview.toString().padStart(2, '0')} delta="Unverified tracks" note="model detections only" iconName="chart" accent="orange" /><StatCard label="Avg. confidence" value={`${averageConfidence}%`} delta="Database average" note="across detections" iconName="chart" accent="blue" /><StatCard label="GPS locations" value={locationsCovered.toString()} delta="Available coordinates" note="from persisted records" iconName="map" accent="purple" /></div>
           <div className="dashboard-grid">
             <section className="panel map-panel"><div className="panel-heading"><div><p className="eyebrow">GEO-SPATIAL OVERVIEW</p><h2>Detection activity</h2></div><button className="text-button" onClick={() => setActiveNav('Live map')}>View full map {icon('arrow')}</button></div><div className="map-wrap"><div className="map-grid" /><div className="road road-a" /><div className="road road-b" /><div className="road road-c" /><div className="road road-d" />{potholes.filter((item) => item.latitude !== null && item.longitude !== null).map((item) => <button key={item.id} className={`map-pin ${item.id === selectedId ? 'selected' : ''}`} style={mapPosition(item.latitude, item.longitude, potholes)} onClick={() => setSelectedId(item.id)} aria-label={`Select ${item.id}`}><span>{icon('pin')}</span></button>)}{locationsCovered === 0 && <div className="map-empty">No GPS coordinates in persisted detections.</div>}<div className="map-legend"><span><i className="legend-dot high" /> Unverified detections</span><span><i className="legend-dot medium" /> Relative GPS positions</span></div><div className="map-controls"><button>+</button><button>−</button><button>{icon('pin')}</button></div></div></section>
             <section className="panel activity-panel"><div className="panel-heading"><div><p className="eyebrow">LAST 24 HOURS</p><h2>Detection volume</h2></div><span className="data-source">Live database</span></div><div className="chart-summary"><strong>{detectionsLast24Hours}</strong><span>detections <b>persisted</b></span></div><div className="empty-chart">{detectionsLast24Hours === 0 ? 'No detections recorded in the last 24 hours.' : `${detectionsLast24Hours} detection${detectionsLast24Hours === 1 ? '' : 's'} recorded in the last 24 hours.`}</div></section>
