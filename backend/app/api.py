@@ -49,7 +49,6 @@ def list_potholes():
             "is_simulated": bool(row["is_simulated"]) if row["is_simulated"] is not None else False,
             "location_basis": row["location_basis"],
             "confidence": row["best_confidence"],
-            "severity": "Unassessed",
             "address": (
                 "Simulated camera position" if row["is_simulated"]
                 else "Camera GPS estimate (not surveyed)" if row["latitude"] is not None
