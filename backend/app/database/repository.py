@@ -54,7 +54,7 @@ def link_track_to_incident(pothole_id, incident_id):
                  best_confidence=MAX(best_confidence, COALESCE(
                    (SELECT MAX(confidence) FROM observations WHERE incident_id=?), best_confidence))
                WHERE id=?""",
-            (incident_id, incident_id, incident_id, incident_id),
+            (incident_id, incident_id, incident_id, incident_id, incident_id),
         )
         connection.commit()
     finally:
