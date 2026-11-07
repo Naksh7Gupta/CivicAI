@@ -158,6 +158,8 @@ class ReportingLayerTests(unittest.TestCase):
                 start="2026-11-08T00:00:00+00:00",
                 end="2026-11-07T00:00:00+00:00",
             )
+        context = build_area_context()
+        self.assertIn("no polygon", context["scope"].lower())
 
     def test_report_context_marks_missing_and_simulated_facts(self):
         connection = database.get_connection()
