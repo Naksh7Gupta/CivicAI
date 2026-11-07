@@ -138,7 +138,8 @@ def build_incident_context(incident_id):
             "bounding_box_pixels": [row["x1"], row["y1"], row["x2"], row["y2"]],
             "camera_gps": gps,
             "has_stored_evidence_image": bool(row["has_image"]),
-            "evidence_image_url": f"/api/potholes/{row['track_record_id']}/image" if row["has_image"] else None,
+            "track_best_evidence_image_url": f"/api/potholes/{row['track_record_id']}/image" if row["has_image"] else None,
+            "evidence_note": "This is the stored best-confidence crop for the tracker record, not a separate image for every observation." if row["has_image"] else None,
         })
     return {
         "incident": {
