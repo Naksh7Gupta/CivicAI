@@ -37,12 +37,12 @@ def associate_session_fix(session_id, frame_timestamp, *, max_gap_seconds=2.0, m
     connection = get_connection()
     try:
         before = connection.execute(
-            """SELECT * FROM gps_fixes WHERE session_id=? AND recorded_at<=?
-               ORDER BY recorded_at DESC LIMIT 1""", (session_id, target)
+            """SELECT * FROM gps_fixes WHERE session_id=? AND recorded_at<=? AND accuracy_m<=?
+               ORDER BY recorded_at DESC LIMIT 1""", (session_id, target, max_accuracy_m)
         ).fetchone()
         after = connection.execute(
-            """SELECT * FROM gps_fixes WHERE session_id=? AND recorded_at>=?
-               ORDER BY recorded_at ASC LIMIT 1""", (session_id, target)
+            """SELECT * FROM gps_fixes WHERE session_id=? AND recorded_at>=? AND accuracy_m<=?
+               ORDER BY recorded_at ASC LIMIT 1""", (session_id, target, max_accuracy_m)
         ).fetchone()
         rows = [row for row in (before, after) if row is not None]
         if len(rows) == 2 and rows[0]["id"] == rows[1]["id"]:
