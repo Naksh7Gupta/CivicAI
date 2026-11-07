@@ -11,6 +11,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from app.database.database import get_connection
+from app.geolocation.association import parse_timestamp
 
 
 class LLMConfigurationError(RuntimeError):
@@ -157,6 +158,12 @@ def build_incident_context(incident_id):
 
 
 def build_area_context(start=None, end=None):
+    if start:
+        start = parse_timestamp(start).isoformat()
+    if end:
+        end = parse_timestamp(end).isoformat()
+    if start and end and start > end:
+        raise ValueError('Area report start must not be after end.')
     clauses, parameters = [], []
     if start:
         clauses.append("first_seen>=?")
