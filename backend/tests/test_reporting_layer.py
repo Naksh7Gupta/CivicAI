@@ -15,7 +15,8 @@ from app.geolocation.csv_import import import_gps_csv
 from app.geolocation.repository import save_gps_fix, associate_session_fix
 from app.services.detection_manager import DetectionManager
 from app.services.reporting import (LLMConfigurationError, OpenAICompatibleClient,
-                                     build_incident_context, generate_incident_report)
+                                     build_area_context, build_incident_context,
+                                     generate_incident_report)
 
 
 class FakeTensor:
@@ -103,6 +104,7 @@ class ReportingLayerTests(unittest.TestCase):
         self.assertEqual(len(observations), 2)
         self.assertEqual(observations[0]["location_source"], "synthetic")
         self.assertEqual(observations[0]["is_simulated"], 1)
+        self.assertEqual(observations[0]["timestamp"], (self.start + timedelta(milliseconds=500)).isoformat())
         self.assertEqual(incident["location_basis"], "camera_position_estimate")
 
     def test_missing_tracker_ids_are_not_merged(self):
@@ -138,6 +140,13 @@ class ReportingLayerTests(unittest.TestCase):
         with patch.dict("os.environ", {}, clear=True):
             with self.assertRaises(LLMConfigurationError):
                 OpenAICompatibleClient.from_environment()
+
+    def test_area_report_rejects_reversed_date_range(self):
+        with self.assertRaises(ValueError):
+            build_area_context(
+                start="2026-11-08T00:00:00+00:00",
+                end="2026-11-07T00:00:00+00:00",
+            )
 
     def test_report_context_marks_missing_and_simulated_facts(self):
         connection = database.get_connection()
