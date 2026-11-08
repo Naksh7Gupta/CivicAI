@@ -10,7 +10,7 @@ class StreamReceiver:
         self.source = source
         self.capture = None
         self.recording_start_time = self._parse_start_time(recording_start_time)
-        self.is_file_source = isinstance(source, (str, Path)) and not str(source).isdigit()
+        self.is_file_source = isinstance(source, (str, Path)) and Path(source).is_file()
 
     @staticmethod
     def _parse_start_time(value):
