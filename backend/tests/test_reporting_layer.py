@@ -13,7 +13,9 @@ from app.database.repository import add_observation, create_track, link_track_to
 from app.geolocation.association import GPSFix, GPSValidationError, associate_gps_fixes
 from app.geolocation.csv_import import import_gps_csv
 from app.geolocation.repository import save_gps_fix, associate_session_fix
+from app.ingestion.stream_receiver import StreamReceiver
 from app.services.detection_manager import DetectionManager
+from app.services.incident_aggregator import create_incident, record_incident_observation
 from app.services.reporting import (LLMConfigurationError, OpenAICompatibleClient,
                                      build_area_context, build_incident_context,
                                      generate_incident_report)
@@ -199,6 +201,72 @@ class ReportingLayerTests(unittest.TestCase):
         self.assertEqual(saved["report_type"], "incident")
         self.assertIn("interpretation_limits", json.loads(saved["context_json"]))
 
+
+    def test_rtsp_and_camera_sources_are_not_misclassified_as_video_files(self):
+        self.assertFalse(StreamReceiver("rtsp://camera.example/live").is_file_source)
+        self.assertFalse(StreamReceiver(0).is_file_source)
+        local_video = Path(self.temp_dir.name) / "recording.mp4"
+        local_video.touch()
+        self.assertTrue(StreamReceiver(local_video).is_file_source)
+
+    def test_real_gps_replaces_synthetic_incident_reference(self):
+        synthetic = GPSFix(
+            self.start, 29.68, 76.98, 2.0,
+            source="synthetic", is_simulated=True,
+        ).validated()
+        real = GPSFix(
+            self.start + timedelta(seconds=1), 29.69, 76.99, 12.0,
+            source="gps", is_simulated=False,
+        ).validated()
+        incident_id = create_incident("mixed-source-session", 1, "t1", 0.8, synthetic)
+        record_incident_observation(incident_id, "t2", 0.9, real)
+        connection = database.get_connection()
+        incident = connection.execute(
+            "SELECT * FROM incidents WHERE id=?", (incident_id,)
+        ).fetchone()
+        connection.close()
+        self.assertEqual(incident["location_source"], "gps")
+        self.assertEqual(incident["is_simulated"], 0)
+        self.assertEqual(incident["reference_latitude"], 29.69)
+
+    def test_area_report_includes_overlapping_incidents_and_window_counts(self):
+        first_seen = self.start - timedelta(hours=1)
+        last_seen = self.start + timedelta(hours=2)
+        incident_id = create_incident(
+            "area-window-session", 4, first_seen.isoformat(), 0.8
+        )
+        track_id = create_track(
+            "area-window-session", 4, first_seen.isoformat(), 0.8,
+            (1, 2, 3, 4), None, incident_id=incident_id,
+        )
+        timestamps = [
+            first_seen,
+            self.start + timedelta(minutes=30),
+            last_seen,
+        ]
+        for timestamp in timestamps:
+            add_observation(
+                track_id, timestamp.isoformat(), 0.8, (1, 2, 3, 4),
+                incident_id=incident_id,
+            )
+        connection = database.get_connection()
+        connection.execute(
+            "UPDATE incidents SET last_seen=?, observation_count=3 WHERE id=?",
+            (last_seen.isoformat(), incident_id),
+        )
+        connection.commit()
+        connection.close()
+
+        context = build_area_context(
+            start=self.start.isoformat(),
+            end=(self.start + timedelta(hours=1)).isoformat(),
+        )
+        self.assertEqual(context["incident_count"], 1)
+        self.assertEqual(context["observation_count"], 3)
+        self.assertEqual(context["observations_in_selected_window"], 1)
+        self.assertEqual(
+            context["incidents"][0]["observations_in_selected_window"], 1
+        )
 
 if __name__ == "__main__":
     unittest.main()
