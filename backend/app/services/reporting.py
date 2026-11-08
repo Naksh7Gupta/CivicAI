@@ -164,45 +164,84 @@ def build_area_context(start=None, end=None):
     if end:
         end = parse_timestamp(end).isoformat()
     if start and end and start > end:
-        raise ValueError('Area report start must not be after end.')
+        raise ValueError("Area report start must not be after end.")
+
+    # Include incidents whose observed interval overlaps the requested period.
+    # Filtering only by first_seen would incorrectly omit incidents that began
+    # before the period but were still observed during it.
     clauses, parameters = [], []
     if start:
-        clauses.append("first_seen>=?")
+        clauses.append("last_seen>=?")
         parameters.append(start)
     if end:
         clauses.append("first_seen<=?")
         parameters.append(end)
     where = " WHERE " + " AND ".join(clauses) if clauses else ""
+
     connection = get_connection()
     try:
-        rows = connection.execute("SELECT * FROM incidents" + where + " ORDER BY first_seen", parameters).fetchall()
+        rows = connection.execute(
+            "SELECT * FROM incidents" + where + " ORDER BY first_seen",
+            parameters,
+        ).fetchall()
+
+        incidents = []
+        for row in rows:
+            observation_clauses = ["incident_id=?"]
+            observation_parameters = [row["id"]]
+            if start:
+                observation_clauses.append("timestamp>=?")
+                observation_parameters.append(start)
+            if end:
+                observation_clauses.append("timestamp<=?")
+                observation_parameters.append(end)
+            observation_count_in_window = connection.execute(
+                "SELECT COUNT(*) FROM observations WHERE "
+                + " AND ".join(observation_clauses),
+                observation_parameters,
+            ).fetchone()[0]
+            incidents.append({
+                "incident_id": row["id"],
+                "session_id": row["session_id"],
+                "first_seen": row["first_seen"],
+                "last_seen": row["last_seen"],
+                # Lifetime count retained for transparency; the separate
+                # window count is calculated from timestamped observations.
+                "observation_count": row["observation_count"],
+                "observations_in_selected_window": observation_count_in_window,
+                "best_model_confidence": row["best_confidence"],
+                "location_available": row["reference_latitude"] is not None,
+                "location_source": row["location_source"],
+                "is_simulated": bool(row["is_simulated"]),
+                "location_basis": row["location_basis"],
+            })
     finally:
         connection.close()
-    incidents = [{
-        "incident_id": row["id"], "session_id": row["session_id"],
-        "first_seen": row["first_seen"], "last_seen": row["last_seen"],
-        "observation_count": row["observation_count"],
-        "best_model_confidence": row["best_confidence"],
-        "location_available": row["reference_latitude"] is not None,
-        "location_source": row["location_source"],
-        "is_simulated": bool(row["is_simulated"]),
-        "location_basis": row["location_basis"],
-    } for row in rows]
+
     return {
         "period": {"start": start, "end": end},
-        "scope": "All persisted incidents in the selected time window; no polygon or administrative boundary filter is applied.",
+        "scope": (
+            "Incidents whose recorded activity overlaps the selected time window. "
+            "Per-incident observation_count is the lifetime total; "
+            "observations_in_selected_window is counted from timestamped records "
+            "inside the selected period. No polygon or administrative boundary filter is applied."
+        ),
         "incident_count": len(incidents),
         "observation_count": sum(item["observation_count"] for item in incidents),
+        "observations_in_selected_window": sum(
+            item["observations_in_selected_window"] for item in incidents
+        ),
         "incidents": incidents,
         "limitations": [
             "Counts are tracker-level records, not independently field-verified potholes.",
             "No geographic boundary or administrative-area filter is applied to this summary.",
+            "Lifetime observation counts are not restricted to the selected period.",
+            "The selected-period observation count includes only timestamped observation rows.",
             "Camera GPS is an estimate of recording-device position, not surveyed defect coordinates.",
             "Simulated coordinates are not real locations.",
             "Model confidence is not a physical severity or repair status.",
         ],
     }
-
 
 def _store_report(report_type, incident_id, context, narrative, model):
     generated_at = datetime.now(timezone.utc).isoformat()
