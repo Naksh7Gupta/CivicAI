@@ -36,32 +36,46 @@ def create_incident(session_id, track_id, timestamp, confidence, gps_association
 def record_incident_observation(incident_id, timestamp, confidence, gps_association=None):
     connection = get_connection()
     try:
-        if gps_association is None:
-            connection.execute(
-                """UPDATE incidents SET last_seen=?, best_confidence=MAX(best_confidence, ?),
-                   observation_count=observation_count+1 WHERE id=?""",
-                (timestamp, confidence, incident_id),
-            )
-        else:
+        connection.execute(
+            """UPDATE incidents SET
+                 last_seen=?, best_confidence=MAX(best_confidence, ?),
+                 observation_count=observation_count+1
+               WHERE id=?""",
+            (timestamp, confidence, incident_id),
+        )
+
+        if gps_association is not None:
             gps = gps_association
-            connection.execute(
-                """UPDATE incidents SET
-                     last_seen=?, best_confidence=MAX(best_confidence, ?),
-                     observation_count=observation_count+1,
-                     reference_latitude=CASE WHEN gps_accuracy_m IS NULL OR gps_accuracy_m>? THEN ? ELSE reference_latitude END,
-                     reference_longitude=CASE WHEN gps_accuracy_m IS NULL OR gps_accuracy_m>? THEN ? ELSE reference_longitude END,
-                     gps_accuracy_m=CASE WHEN gps_accuracy_m IS NULL OR gps_accuracy_m>? THEN ? ELSE gps_accuracy_m END,
-                     location_source=CASE WHEN gps_accuracy_m IS NULL OR gps_accuracy_m>? THEN ? ELSE location_source END,
-                     is_simulated=CASE WHEN gps_accuracy_m IS NULL OR gps_accuracy_m>? THEN ? ELSE is_simulated END,
-                     location_basis='camera_position_estimate'
-                   WHERE id=?""",
-                (timestamp, confidence,
-                 gps.accuracy_m, gps.latitude,
-                 gps.accuracy_m, gps.longitude,
-                 gps.accuracy_m, gps.accuracy_m,
-                 gps.accuracy_m, gps.source,
-                 gps.accuracy_m, int(gps.is_simulated), incident_id),
+            current = connection.execute(
+                "SELECT gps_accuracy_m, is_simulated FROM incidents WHERE id=?",
+                (incident_id,),
+            ).fetchone()
+            if current is None:
+                raise KeyError(f"Incident {incident_id} was not found")
+
+            current_accuracy = current["gps_accuracy_m"]
+            current_is_simulated = bool(current["is_simulated"])
+            # A real GPS fix takes precedence over a simulated point even when
+            # its reported accuracy is numerically larger. Within the same
+            # simulation class, retain the fix with the smaller reported error.
+            prefer_new_location = (
+                current_accuracy is None
+                or (current_is_simulated and not gps.is_simulated)
+                or (
+                    current_is_simulated == gps.is_simulated
+                    and gps.accuracy_m < current_accuracy
+                )
             )
+            if prefer_new_location:
+                connection.execute(
+                    """UPDATE incidents SET
+                         reference_latitude=?, reference_longitude=?,
+                         gps_accuracy_m=?, location_source=?, is_simulated=?,
+                         location_basis='camera_position_estimate'
+                       WHERE id=?""",
+                    (gps.latitude, gps.longitude, gps.accuracy_m, gps.source,
+                     int(gps.is_simulated), incident_id),
+                )
         connection.commit()
     finally:
         connection.close()
