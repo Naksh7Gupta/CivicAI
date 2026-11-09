@@ -1,0 +1,23 @@
+name: CivicAI backend tests
+
+on:
+  pull_request:
+  push:
+
+jobs:
+  backend-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install test dependencies
+        run: python -m pip install --upgrade pip numpy opencv-python-headless python-dotenv fastapi
+      - name: Run backend tests
+        working-directory: backend
+        run: |
+          python -m compileall -q app tests import_gps.py
+          python -m unittest discover -s tests -v

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 
 type Pothole = {
   id: string
@@ -7,9 +7,13 @@ type Pothole = {
   latitude: number | null
   longitude: number | null
   confidence: number
-  severity: 'High' | 'Medium' | 'Low'
+  incident_id: number | null
+  gps_accuracy_m: number | null
+  location_source: string | null
+  is_simulated: boolean
+  location_basis: string | null
   address: string
-  status: 'Needs review' | 'Reported' | 'Monitoring'
+  status: 'Needs field review' | 'Reported' | 'Monitoring'
 }
 
 const icon = (name: string) => {
@@ -33,10 +37,18 @@ function formatTime(value: string) {
   return new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' }).format(new Date(value))
 }
 
-function mapPosition(latitude: number | null, longitude: number | null) {
+function mapPosition(latitude: number | null, longitude: number | null, items: Pothole[]) {
   if (latitude === null || longitude === null) return { left: '50%', top: '50%' }
-  const left = Math.min(88, Math.max(12, ((longitude + 74.01) / 0.045) * 100))
-  const top = Math.min(86, Math.max(14, (1 - (latitude - 40.72) / 0.04) * 100))
+  const located = items.filter((item) => item.latitude !== null && item.longitude !== null)
+  if (located.length < 2) return { left: '50%', top: '50%' }
+  const latitudes = located.map((item) => item.latitude as number)
+  const longitudes = located.map((item) => item.longitude as number)
+  const minLat = Math.min(...latitudes), maxLat = Math.max(...latitudes)
+  const minLon = Math.min(...longitudes), maxLon = Math.max(...longitudes)
+  const latSpan = maxLat - minLat || 1
+  const lonSpan = maxLon - minLon || 1
+  const left = 12 + ((longitude - minLon) / lonSpan) * 76
+  const top = 14 + (1 - (latitude - minLat) / latSpan) * 72
   return { left: `${left}%`, top: `${top}%` }
 }
 
@@ -47,14 +59,42 @@ function App() {
   const [activeNav, setActiveNav] = useState('Overview')
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
+  const [reportNarrative, setReportNarrative] = useState('')
+  const [reportError, setReportError] = useState('')
+  const [reportLoading, setReportLoading] = useState(false)
   const selected = potholes.find((item) => item.id === selectedId) ?? potholes[0]
   const filtered = potholes.filter((item) => `${item.id} ${item.address}`.toLowerCase().includes(query.toLowerCase()))
-  const highPriority = potholes.filter((item) => item.severity === 'High').length
+  const needsReview = potholes.filter((item) => item.status === 'Needs field review').length
   const averageConfidence = potholes.length ? Math.round((potholes.reduce((sum, item) => sum + item.confidence, 0) / potholes.length) * 100) : 0
   const detectionsLast24Hours = potholes.filter((item) => Date.now() - new Date(item.timestamp).getTime() <= 24 * 60 * 60 * 1000).length
   const locationsCovered = new Set(potholes.filter((item) => item.latitude !== null && item.longitude !== null).map((item) => `${item.latitude},${item.longitude}`)).size
   const connectionLabel = loadError ? 'Backend offline' : loading ? 'Connecting to backend' : 'Backend connected'
   const connectionDetail = loadError ? 'Start the CivicAI API on port 8000' : loading ? 'Loading persisted detections' : 'Data source: CivicAI API'
+
+  async function generateSelectedReport() {
+    if (!selected?.incident_id) {
+      setReportError('This track has no incident record yet.')
+      return
+    }
+    setReportLoading(true)
+    setReportError('')
+    setReportNarrative('')
+    try {
+      const response = await fetch(`/api/incidents/${selected.incident_id}/report`, { method: 'POST' })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.detail ?? `Report request failed (${response.status}).`)
+      setReportNarrative(data.narrative ?? '')
+    } catch (error) {
+      setReportError(error instanceof Error ? error.message : 'Unable to generate the report.')
+    } finally {
+      setReportLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    setReportNarrative('')
+    setReportError('')
+  }, [selectedId])
 
   useEffect(() => {
     let active = true
@@ -77,7 +117,6 @@ function App() {
     return () => { active = false }
   }, [])
 
-  const report = useMemo(() => selected ? `Detected ${selected.severity.toLowerCase()}-priority road surface damage at ${selected.address}. Computer vision confidence is ${Math.round(selected.confidence * 100)}%, captured ${formatTime(selected.timestamp)}. Recommend field verification and repair triage.` : '', [selected])
 
   return (
     <div className="app-shell">
@@ -97,14 +136,14 @@ function App() {
           {!loading && loadError && <div className="data-state error">Unable to load real detections: {loadError}</div>}
           {!loading && !loadError && potholes.length === 0 && <div className="data-state">No pothole detections have been persisted yet.</div>}
           <div className="intro-row"><div><p className="eyebrow">CIVICAI OPERATIONS <span className="dot" /> LIVE DATABASE</p><h1>Infrastructure intelligence <span>✦</span></h1><p className="subheading">A live view of persisted pothole detections from the CivicAI backend.</p></div><div className="intro-actions"><button className="button primary" onClick={() => window.print()}>{icon('download')} Export report</button></div></div>
-          <div className="stat-grid"><StatCard label="Total detections" value={potholes.length.toString()} delta="Persisted" note="in CivicAI database" iconName="pin" accent="mint" /><StatCard label="High priority" value={highPriority.toString().padStart(2, '0')} delta="Current records" note="confidence ≥ 90%" iconName="chart" accent="orange" /><StatCard label="Avg. confidence" value={`${averageConfidence}%`} delta="Database average" note="across detections" iconName="chart" accent="blue" /><StatCard label="GPS locations" value={locationsCovered.toString()} delta="Available coordinates" note="from persisted records" iconName="map" accent="purple" /></div>
+          <div className="stat-grid"><StatCard label="Tracked incidents" value={potholes.length.toString()} delta="Persisted" note="tracker-level records" iconName="pin" accent="mint" /><StatCard label="Needs field review" value={needsReview.toString().padStart(2, '0')} delta="Unverified tracks" note="model detections only" iconName="chart" accent="orange" /><StatCard label="Avg. confidence" value={`${averageConfidence}%`} delta="Database average" note="across detections" iconName="chart" accent="blue" /><StatCard label="GPS locations" value={locationsCovered.toString()} delta="Available coordinates" note="from persisted records" iconName="map" accent="purple" /></div>
           <div className="dashboard-grid">
-            <section className="panel map-panel"><div className="panel-heading"><div><p className="eyebrow">GEO-SPATIAL OVERVIEW</p><h2>Detection activity</h2></div><button className="text-button" onClick={() => setActiveNav('Live map')}>View full map {icon('arrow')}</button></div><div className="map-wrap"><div className="map-grid" /><div className="road road-a" /><div className="road road-b" /><div className="road road-c" /><div className="road road-d" />{potholes.filter((item) => item.latitude !== null && item.longitude !== null).map((item) => <button key={item.id} className={`map-pin ${item.id === selectedId ? 'selected' : ''}`} style={mapPosition(item.latitude, item.longitude)} onClick={() => setSelectedId(item.id)} aria-label={`Select ${item.id}`}><span>{icon('pin')}</span></button>)}{locationsCovered === 0 && <div className="map-empty">No GPS coordinates in persisted detections.</div>}<div className="map-legend"><span><i className="legend-dot high" /> High priority</span><span><i className="legend-dot medium" /> Monitoring</span></div><div className="map-controls"><button>+</button><button>−</button><button>{icon('pin')}</button></div></div></section>
+            <section className="panel map-panel"><div className="panel-heading"><div><p className="eyebrow">RELATIVE GPS PLOT</p><h2>Camera positions (relative)</h2></div><button className="text-button" onClick={() => setActiveNav('Live map')}>View GPS details {icon('arrow')}</button></div><div className="map-wrap"><div className="map-grid" /><div className="road road-a" /><div className="road road-b" /><div className="road road-c" /><div className="road road-d" />{potholes.filter((item) => item.latitude !== null && item.longitude !== null).map((item) => <button key={item.id} className={`map-pin ${item.id === selectedId ? 'selected' : ''}`} style={mapPosition(item.latitude, item.longitude, potholes)} onClick={() => setSelectedId(item.id)} aria-label={`Select ${item.id}`}><span>{icon('pin')}</span></button>)}{locationsCovered === 0 && <div className="map-empty">No GPS coordinates in persisted detections.</div>}<div className="map-legend"><span><i className="legend-dot high" /> Unverified detections</span><span><i className="legend-dot medium" /> Relative GPS positions</span></div><div className="map-controls"><button>+</button><button>−</button><button>{icon('pin')}</button></div></div></section>
             <section className="panel activity-panel"><div className="panel-heading"><div><p className="eyebrow">LAST 24 HOURS</p><h2>Detection volume</h2></div><span className="data-source">Live database</span></div><div className="chart-summary"><strong>{detectionsLast24Hours}</strong><span>detections <b>persisted</b></span></div><div className="empty-chart">{detectionsLast24Hours === 0 ? 'No detections recorded in the last 24 hours.' : `${detectionsLast24Hours} detection${detectionsLast24Hours === 1 ? '' : 's'} recorded in the last 24 hours.`}</div></section>
           </div>
           <div className="lower-grid">
-            <section className="panel gallery-panel"><div className="panel-heading"><div><p className="eyebrow">RECENT EVIDENCE</p><h2>Captured potholes <span className="count-badge">{filtered.length}</span></h2></div><button className="text-button" onClick={() => setActiveNav('Evidence gallery')}>View gallery {icon('arrow')}</button></div><div className="gallery-grid">{filtered.slice(0, 4).map((item) => <button className={`evidence-card ${item.id === selectedId ? 'selected' : ''}`} key={item.id} onClick={() => setSelectedId(item.id)}><div className="evidence-image"><img src={item.image_url} alt={`Evidence for ${item.id}`} /><span className={`confidence ${item.severity.toLowerCase()}`}>{Math.round(item.confidence * 100)}%</span><span className="image-expand">↗</span></div><div className="evidence-meta"><div><b>{item.id}</b><small>{formatTime(item.timestamp)} <span>•</span> {item.address}</small></div><span className={`severity ${item.severity.toLowerCase()}`}>{item.severity}</span></div></button>)}</div></section>
-            <section className="panel detail-panel"><div className="panel-heading"><div><p className="eyebrow">SELECTED INCIDENT</p><h2>{selected?.id ?? 'No selection'}</h2></div><button className="more-button">•••</button></div>{selected && <><div className="detail-image"><img src={selected.image_url} alt="" /><span className="verified-tag">✓ AI verified</span></div><div className="detail-fields"><div><small>LOCATION</small><b>{selected.address}</b><span>{selected.latitude !== null && selected.longitude !== null ? `${selected.latitude.toFixed(4)}° N, ${Math.abs(selected.longitude).toFixed(4)}° W` : 'GPS coordinates unavailable'}</span></div><div><small>CAPTURED</small><b>{formatTime(selected.timestamp)}</b><span>Persisted detection record</span></div><div><small>MODEL CONFIDENCE</small><b>{Math.round(selected.confidence * 100)}% <span className={`severity ${selected.severity.toLowerCase()}`}>{selected.severity}</span></b><span>Above review threshold</span></div></div><div className="report-box"><small>AUTO-GENERATED INCIDENT REPORT</small><p>{report}</p></div><button className="button primary full" onClick={() => setActiveNav('Reports')}>Open full incident report {icon('arrow')}</button></>}</section>
+            <section className="panel gallery-panel"><div className="panel-heading"><div><p className="eyebrow">RECENT EVIDENCE</p><h2>Captured potholes <span className="count-badge">{filtered.length}</span></h2></div><button className="text-button" onClick={() => setActiveNav('Evidence gallery')}>View gallery {icon('arrow')}</button></div><div className="gallery-grid">{filtered.slice(0, 4).map((item) => <button className={`evidence-card ${item.id === selectedId ? 'selected' : ''}`} key={item.id} onClick={() => setSelectedId(item.id)}><div className="evidence-image"><img src={item.image_url} alt={`Evidence for ${item.id}`} /><span className="confidence">{Math.round(item.confidence * 100)}%</span><span className="image-expand">↗</span></div><div className="evidence-meta"><div><b>{item.id}</b><small>{formatTime(item.timestamp)} <span>•</span> {item.address}</small></div><span className="severity">Needs review</span></div></button>)}</div></section>
+            <section className="panel detail-panel"><div className="panel-heading"><div><p className="eyebrow">SELECTED INCIDENT</p><h2>{selected?.id ?? 'No selection'}</h2></div><button className="more-button">•••</button></div>{selected && <><div className="detail-image"><img src={selected.image_url} alt="" /><span className="verified-tag">Model evidence • unverified</span></div><div className="detail-fields"><div><small>LOCATION</small><b>{selected.address}</b><span>{selected.latitude !== null && selected.longitude !== null ? `${Math.abs(selected.latitude).toFixed(5)}° ${selected.latitude >= 0 ? 'N' : 'S'}, ${Math.abs(selected.longitude).toFixed(5)}° ${selected.longitude >= 0 ? 'E' : 'W'}` : 'GPS coordinates unavailable'}</span><span>{selected.is_simulated ? 'SIMULATED COORDINATES' : selected.location_basis === 'camera_position_estimate' ? `Camera GPS estimate${selected.gps_accuracy_m ? ` • ±${selected.gps_accuracy_m} m reported accuracy` : ''}` : 'Location provenance unavailable'}</span></div><div><small>CAPTURED</small><b>{formatTime(selected.timestamp)}</b><span>Persisted detection record</span></div><div><small>MODEL CONFIDENCE</small><b>{Math.round(selected.confidence * 100)}%</b><span>Model confidence only; not physical severity</span></div></div><div className="report-box"><small>{reportNarrative ? 'LLM DRAFT • REVIEW REQUIRED' : 'REPORT STATUS'}</small><p>{reportNarrative || 'No LLM report has been generated yet. Model confidence is not a severity rating, and no field inspection or authority action is recorded.'}</p>{reportError && <p className="error">{reportError}</p>}</div><button className="button primary full" onClick={generateSelectedReport} disabled={reportLoading || !selected.incident_id}>{reportLoading ? 'Generating report…' : 'Generate evidence-grounded report'} {icon('arrow')}</button></>}</section>
           </div>
         </section>
       </main>

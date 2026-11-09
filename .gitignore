@@ -1,2 +1,16 @@
 /references
 /backend/venv
+
+# Local Python environments and caches
+/backend/.venv/
+/backend/venv/
+**/__pycache__/
+*.py[cod]
+
+# Local credentials and environment files (keep .env.example tracked)
+/.env
+**/.env
+
+# Local database and generated evidence
+/backend/data/*.db
+/backend/storage/
