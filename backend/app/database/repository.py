@@ -67,16 +67,18 @@ def update_track(pothole_id, timestamp, confidence, bbox, crop_path=None):
         if crop_path:
             connection.execute(
                 """UPDATE pothole_tracks SET
-                     last_seen=?, best_confidence=MAX(best_confidence, ?),
+                     first_seen=MIN(first_seen, ?), last_seen=MAX(last_seen, ?),
+                     best_confidence=MAX(best_confidence, ?),
                      x1=?, y1=?, x2=?, y2=?, crop_path=?, image=?, image_mime='image/jpeg'
                    WHERE id=?""",
-                (timestamp, confidence, *bbox, crop_path, _read_image(crop_path), pothole_id),
+                (timestamp, timestamp, confidence, *bbox, crop_path, _read_image(crop_path), pothole_id),
             )
         else:
             connection.execute(
-                """UPDATE pothole_tracks SET last_seen=?,
+                """UPDATE pothole_tracks SET first_seen=MIN(first_seen, ?),
+                   last_seen=MAX(last_seen, ?),
                    best_confidence=MAX(best_confidence, ?) WHERE id=?""",
-                (timestamp, confidence, pothole_id),
+                (timestamp, timestamp, confidence, pothole_id),
             )
         connection.commit()
     finally:
@@ -103,6 +105,27 @@ def add_observation(pothole_id, timestamp, confidence, bbox, *, incident_id=None
              gps.offset_ms if gps else None, gps.fix_before_id if gps else None,
              gps.fix_after_id if gps else None),
         )
+        if incident_id is not None:
+            # Keep incident aggregates transactionally consistent with the
+            # observation row that was just inserted. MIN/MAX make the time
+            # interval safe when frames arrive out of order.
+            connection.execute(
+                """UPDATE incidents SET
+                     observation_count=(
+                       SELECT COUNT(*) FROM observations WHERE incident_id=?
+                     ),
+                     first_seen=COALESCE((
+                       SELECT MIN(timestamp) FROM observations WHERE incident_id=?
+                     ), first_seen),
+                     last_seen=COALESCE((
+                       SELECT MAX(timestamp) FROM observations WHERE incident_id=?
+                     ), last_seen),
+                     best_confidence=MAX(best_confidence, COALESCE((
+                       SELECT MAX(confidence) FROM observations WHERE incident_id=?
+                     ), best_confidence))
+                   WHERE id=?""",
+                (incident_id, incident_id, incident_id, incident_id, incident_id),
+            )
         connection.commit()
     finally:
         connection.close()
