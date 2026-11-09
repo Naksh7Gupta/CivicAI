@@ -1,4 +1,5 @@
 import json
+import sqlite3
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -268,5 +269,52 @@ class ReportingLayerTests(unittest.TestCase):
             context["incidents"][0]["observations_in_selected_window"], 1
         )
 
+    def test_incident_aggregates_remain_correct_for_out_of_order_observations(self):
+        later = self.start + timedelta(seconds=10)
+        earlier = self.start
+        incident_id = create_incident(
+            "out-of-order-session", 12, later.isoformat(), 0.8
+        )
+        track_id = create_track(
+            "out-of-order-session", 12, later.isoformat(), 0.8,
+            (1, 2, 3, 4), None, incident_id=incident_id,
+        )
+        add_observation(
+            track_id, later.isoformat(), 0.8, (1, 2, 3, 4),
+            incident_id=incident_id,
+        )
+        add_observation(
+            track_id, earlier.isoformat(), 0.93, (1, 2, 3, 4),
+            incident_id=incident_id,
+        )
+
+        connection = database.get_connection()
+        incident = connection.execute(
+            "SELECT * FROM incidents WHERE id=?", (incident_id,)
+        ).fetchone()
+        connection.close()
+        self.assertEqual(incident["first_seen"], earlier.isoformat())
+        self.assertEqual(incident["last_seen"], later.isoformat())
+        self.assertEqual(incident["observation_count"], 2)
+        self.assertAlmostEqual(incident["best_confidence"], 0.93)
+
+    def test_failed_observation_insert_does_not_increment_incident_count(self):
+        incident_id = create_incident(
+            "atomic-observation-session", 2, self.start.isoformat(), 0.7
+        )
+        with self.assertRaises(sqlite3.IntegrityError):
+            add_observation(
+                999999, self.start.isoformat(), 0.99, (1, 2, 3, 4),
+                incident_id=incident_id,
+            )
+
+        connection = database.get_connection()
+        incident = connection.execute(
+            "SELECT observation_count FROM incidents WHERE id=?", (incident_id,)
+        ).fetchone()
+        connection.close()
+        self.assertEqual(incident["observation_count"], 0)
+
 if __name__ == "__main__":
+    unittest.main()if __name__ == "__main__":
     unittest.main()
