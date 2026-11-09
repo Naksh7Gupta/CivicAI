@@ -316,5 +316,4 @@ class ReportingLayerTests(unittest.TestCase):
         self.assertEqual(incident["observation_count"], 0)
 
 if __name__ == "__main__":
-    unittest.main()if __name__ == "__main__":
     unittest.main()
