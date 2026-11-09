@@ -36,14 +36,9 @@ def create_incident(session_id, track_id, timestamp, confidence, gps_association
 def record_incident_observation(incident_id, timestamp, confidence, gps_association=None):
     connection = get_connection()
     try:
-        connection.execute(
-            """UPDATE incidents SET
-                 last_seen=?, best_confidence=MAX(best_confidence, ?),
-                 observation_count=observation_count+1
-               WHERE id=?""",
-            (timestamp, confidence, incident_id),
-        )
-
+        # Observation counts and time bounds are updated in the same
+        # transaction as the observation insert in database.repository.
+        # This function only maintains the best available GPS reference.
         if gps_association is not None:
             gps = gps_association
             current = connection.execute(
